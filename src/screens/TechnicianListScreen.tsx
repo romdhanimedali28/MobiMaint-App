@@ -1,15 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { View, FlatList, Text, TouchableOpacity } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../types';
+// import { useNavigation } from '@react-navigation/native';
+// import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+// import { RootStackParamList } from '../types';
 import { tailwind } from '../utils/tailwind';
 import { getTechnicians } from '../services/api';
 import { Technician } from '../types';
 
 export default function TechnicianListScreen() {
   const [technicians, setTechnicians] = useState<Technician[]>([]);
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  // const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   useEffect(() => {
     const fetchTechnicians = async () => {
@@ -43,7 +43,7 @@ export default function TechnicianListScreen() {
       />
       <TouchableOpacity
         style={tailwind('bg-blue-600 p-3 rounded mt-4')}
-        onPress={() => navigation.navigate('ExpertList')}
+        // onPress={() => navigation.navigate('ExpertList')}
       >
         <Text style={tailwind('text-white text-center font-bold font-roboto')}>
           View Connected Experts
