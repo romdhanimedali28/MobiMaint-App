@@ -2,7 +2,10 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import BackendScreen from '../screens/BackendScreen';
 import LoginScreen from '../screens/LoginScreen';
+import HomeScreen from '../screens/HomeScreen';
+import WorkOrderDetails from '../screens/WorkerOrderDetails';
 import ExpertListScreen from '../screens/ExpertListScreen';
+import ExpertHomeScreen from '../screens/ExpertHomeScreen';
 import VideoCallScreen from '../screens/VideoCallScreen';
 import { RootStackParamList } from '../types';
 
@@ -21,18 +24,33 @@ export default function AppNavigator() {
         component={LoginScreen} 
         options={{ title: 'Login' }} 
       />
+       <Stack.Screen 
+        name="Home" 
+        component={HomeScreen} 
+        options={{ title: 'Home' }} 
+      /> 
+      <Stack.Screen 
+      name="WorkOrderDetails" 
+      component={WorkOrderDetails} 
+      options={{ title: 'WorkOrderDetails' }} 
+    />
       <Stack.Screen 
         name="ExpertList" 
         component={ExpertListScreen} 
         options={{ title: 'Connected Experts' }} 
+      />
+      <Stack.Screen 
+        name="ExpertHome" 
+        component={ExpertHomeScreen} 
+        options={{ title: 'Expert Dashboard' }} 
       />
       <Stack.Screen
         name="VideoCall"
         component={VideoCallScreen}
         options={{
           title: 'Video Call',
-          headerShown: false, // Hide header during video call
-          gestureEnabled: false, // Prevent swipe back during call
+          headerShown: false,
+          gestureEnabled: false,
         }}
       />
     </Stack.Navigator>

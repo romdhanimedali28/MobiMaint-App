@@ -1,57 +1,122 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Image, Alert } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Image, Modal, TextInput, Button, Alert, RefreshControl } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../types';
 import { checkCameraAndMicPermissions, requestCameraAndMicPermissions } from '../services/permissions';
-import uuid from 'react-native-uuid';
+import { getConnectedExperts } from '../services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import io from 'socket.io-client';
+import axios from 'axios';
+import { API_URL_Base} from '../utils/const';
 type Props = NativeStackScreenProps<RootStackParamList, 'ExpertList'>;
 
 interface Expert {
   id: string;
   name: string;
   status: 'online' | 'offline';
-  specialization: string;
+  role: 'Expert';
   avatar?: string;
 }
 
-const experts: Expert[] = [
-  {
-    id: 'user1',
-    name: 'User 1',
-    status: 'online',
-    specialization: 'Caller',
-    avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b47c?w=150',
-  },
-  {
-    id: 'user2',
-    name: 'User 2',
-    status: 'online',
-    specialization: 'Recipient',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
-  },
-];
-
 export default function ExpertListScreen({ navigation, route }: Props) {
-  const { userId, isCaller, callId, recipientId } = route.params; // Require params
+  const { userId, role } = route.params;
   const [permissionsGranted, setPermissionsGranted] = useState(false);
+  const [experts, setExperts] = useState<Expert[]>([]);
+  const [callId, setCallId] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [showCallModal, setShowCallModal] = useState(false);
+  const [callingExpert, setCallingExpert] = useState<string | null>(null);
+  const socket = useRef<any>(null);
+
+  const setupSocket = useCallback(async () => {
+    const backendUrl = await AsyncStorage.getItem('backendUrl');
+    if (backendUrl) {
+      socket.current = io(backendUrl, { transports: ['websocket'] });
+      socket.current.on('connect', () => {
+        console.log(`Socket connected for user ${userId}`);
+        socket.current.emit('register', { userId });
+      });
+
+      socket.current.on('call-response', ({ callId, from, accepted }) => {
+        if (accepted) {
+          setShowCallModal(false); // Close modal on acceptance
+          navigation.navigate('VideoCall', {
+            callId,
+            recipientId: from,
+            userId,
+            role,
+            isCaller: true,
+          });
+        } else {
+          setShowCallModal(false); // Close modal on rejection
+          Alert.alert('Call Rejected', `${from} has rejected the call.`);
+        }
+      });
+
+      socket.current.on('error', ({ message }) => {
+        console.error('Socket error:', message);
+        setShowCallModal(false);
+        Alert.alert('Error', message);
+      });
+    } else {
+      console.error('Backend URL not set');
+      Alert.alert('Error', 'Backend URL not configured');
+    }
+  }, [userId, role, navigation]);
 
   useEffect(() => {
     checkPermissions();
-  }, []);
+    setupSocket();
+
+    return () => {
+      if (socket.current) {
+        socket.current.disconnect();
+      }
+    };
+  }, [setupSocket]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchExperts();
+    }, [])
+  );
 
   const checkPermissions = async () => {
     const granted = await checkCameraAndMicPermissions();
     setPermissionsGranted(granted);
   };
 
+  const fetchExperts = async () => {
+    setLoading(true);
+    try {
+      const fetchedExperts = await getConnectedExperts();
+      setExperts(fetchedExperts);
+    } catch (error) {
+      console.error('Error fetching experts:', error);
+      Alert.alert('Error', 'Failed to load experts');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const fetchedExperts = await getConnectedExperts();
+      setExperts(fetchedExperts);
+    } catch (error) {
+      console.error('Error refreshing experts:', error);
+      Alert.alert('Error', 'Failed to refresh experts');
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
   const startCall = async (expert: Expert) => {
     if (expert.status === 'offline') {
       Alert.alert('Expert Unavailable', `${expert.name} is currently offline. Please try again later.`);
-      return;
-    }
-
-    if (expert.id !== recipientId) {
-      Alert.alert('Error', `You can only call ${recipientId}`);
       return;
     }
 
@@ -64,22 +129,41 @@ export default function ExpertListScreen({ navigation, route }: Props) {
       setPermissionsGranted(true);
     }
 
-    // Ensure callId is a string (fallback if undefined, though should not happen)
-    const validCallId = callId || uuid.v4();
-
-    navigation.navigate('VideoCall', {
-      callId: validCallId,
-      recipientId,
-      userId,
-      isCaller,
-    });
+    let validCallId = callId;
+    if (role === 'Technician') {
+      try {
+        const backendUrl = await AsyncStorage.getItem('backendUrl');
+        if (!backendUrl) throw new Error('Backend URL not set');
+        const response = await axios.post(`${API_URL_Base}/api/create-call`, { userId });
+        validCallId = response.data.callId;
+        setCallId(validCallId);
+        setCallingExpert(expert.name);
+        setShowCallModal(true);
+        socket.current.emit('call-request', { callId: validCallId, from: userId, to: expert.id });
+      } catch (error) {
+        console.error('Error creating call:', error);
+        setShowCallModal(false);
+        Alert.alert('Error', 'Failed to create call');
+      }
+    } else if (!callId) {
+      Alert.alert('Error', 'Please enter a Call ID');
+      return;
+    } else {
+      navigation.navigate('VideoCall', {
+        callId: validCallId,
+        recipientId: expert.id,
+        userId,
+        role,
+        isCaller: false,
+      });
+    }
   };
 
   const renderExpert = ({ item }: { item: Expert }) => (
     <TouchableOpacity
       style={[styles.expertItem, item.status === 'offline' && styles.disabledItem]}
       onPress={() => startCall(item)}
-      disabled={item.status === 'offline' || item.id !== recipientId}
+      disabled={item.status === 'offline'}
     >
       <View style={styles.expertInfo}>
         <Image
@@ -88,7 +172,7 @@ export default function ExpertListScreen({ navigation, route }: Props) {
         />
         <View style={styles.expertDetails}>
           <Text style={styles.expertName}>{item.name}</Text>
-          <Text style={styles.expertSpecialization}>{item.specialization}</Text>
+          <Text style={styles.expertSpecialization}>{item.role}</Text>
           <View style={styles.statusContainer}>
             <View style={[styles.statusDot, { backgroundColor: item.status === 'online' ? '#4CAF50' : '#FF5722' }]} />
             <Text style={[styles.expertStatus, { color: item.status === 'online' ? '#4CAF50' : '#FF5722' }]}>
@@ -98,20 +182,25 @@ export default function ExpertListScreen({ navigation, route }: Props) {
         </View>
       </View>
       <TouchableOpacity
-        style={[styles.callButton, item.status === 'offline' || item.id !== recipientId ? styles.disabledButton : {}]}
+        style={[styles.callButton, item.status === 'offline' ? styles.disabledButton : {}]}
         onPress={() => startCall(item)}
-        disabled={item.status === 'offline' || item.id !== recipientId}
+        disabled={item.status === 'offline'}
       >
         <Text style={styles.callButtonText}>📹</Text>
       </TouchableOpacity>
     </TouchableOpacity>
   );
 
-  // Display callId for caller to share with recipient
-  const callIdDisplay = isCaller ? (
+  const callIdInput = role === 'Expert' ? (
     <View style={styles.callIdContainer}>
-      <Text style={styles.callIdText}>Call ID: {callId}</Text>
-      <Text style={styles.callIdInstruction}>Share this Call ID with {recipientId}</Text>
+      <TextInput
+        style={styles.callIdInput}
+        placeholder="Enter Call ID"
+        value={callId}
+        onChangeText={setCallId}
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
     </View>
   ) : null;
 
@@ -128,14 +217,52 @@ export default function ExpertListScreen({ navigation, route }: Props) {
         <Text style={styles.title}>Expert Support</Text>
         <Text style={styles.subtitle}>Connect with maintenance experts</Text>
       </View>
-      {callIdDisplay}
-      <FlatList
-        data={[...onlineExperts, ...offlineExperts]}
-        renderItem={renderExpert}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContainer}
-        showsVerticalScrollIndicator={false}
-      />
+      <Text style={styles.expertName}>{userId}</Text>
+      {callIdInput}
+      {loading ? (
+        <Text style={styles.loadingText}>Loading experts...</Text>
+      ) : experts.length === 0 ? (
+        <Text style={styles.loadingText}>No experts available</Text>
+      ) : (
+        <FlatList
+          data={[...onlineExperts, ...offlineExperts]}
+          renderItem={renderExpert}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContainer}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={['#1976D2']} // Android
+              tintColor="#1976D2" // iOS
+              title="Pull to refresh" // iOS
+              titleColor="#1976D2" // iOS
+            />
+          }
+        />
+      )}
+      <Modal
+        visible={showCallModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowCallModal(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalText}>Call Request Sent</Text>
+            <Text style={styles.modalSubText}>Waiting for {callingExpert} to respond...</Text>
+            <Button
+              title="Cancel"
+              color="#FF0000"
+              onPress={() => {
+                setShowCallModal(false);
+                socket.current.emit('call-response', { callId, from: userId, to: callingExpert, accepted: false });
+              }}
+            />
+          </View>
+        </View>
+      </Modal>
       <View style={styles.footer}>
         <Text style={styles.footerText}>
           Permissions: {permissionsGranted ? '✅ Granted' : '❌ Not Granted'}
@@ -288,13 +415,39 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     margin: 20,
   },
-  callIdText: {
-    fontSize: 14,
-    color: '#1976D2',
+  callIdInput: {
+    borderWidth: 1,
+    borderColor: '#1976D2',
+    borderRadius: 5,
+    padding: 10,
+    color: '#000',
   },
-  callIdInstruction: {
-    fontSize: 12,
-    color: '#1976D2',
-    marginTop: 5,
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 20,
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    padding: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    width: '80%',
+  },
+  modalText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  modalSubText: {
+    fontSize: 16,
+    marginBottom: 20,
   },
 });
