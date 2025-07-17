@@ -5,9 +5,10 @@ import { View, TextInput, Button, Text, Image, StyleSheet, Alert } from 'react-n
 import { RootStackParamList } from '../types';
 import { useBackend } from '../context/BackendContext';
 import { tailwind } from '../utils/tailwind';
+import { API_URL_Base } from '../utils/const';
 
 export default function BackendScreen() {
-  const [url, setUrl] = useState('http://192.168.1.112:3000'); // Pre-fill for testing
+  const [url, setUrl] = useState(API_URL_Base); // Pre-fill for testing
   const { setBackendUrl } = useBackend();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 

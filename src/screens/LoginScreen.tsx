@@ -5,41 +5,24 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { tailwind } from '../utils/tailwind';
 import { login } from '../services/api';
-import uuid from 'react-native-uuid';
 
 export default function LoginScreen() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [callId, setCallId] = useState(''); // Add callId input
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const handleLogin = async () => {
     try {
       // Authenticate user
-      await login(username, password);
+      const { userId, role } = await login(username, password);
 
-      // Validate username
-      if (!['user1', 'user2'].includes(username)) {
-        Alert.alert('Error', 'Username must be "user1" or "user2"');
-        return;
+ 
+      // Navigate based on role
+      if (role === 'Technician') {
+        navigation.navigate('Home', { userId, role });
+      } else if (role === 'Expert') {
+        navigation.navigate('ExpertHome', { userId, role });
       }
-
-      const isCaller = username === 'user1';
-      const recipientId = username === 'user1' ? 'user2' : 'user1';
-      const generatedCallId = isCaller ? uuid.v4() : callId; // Caller generates, callee uses input
-
-      if (!isCaller && !callId) {
-        Alert.alert('Error', 'Please enter a Call ID');
-        return;
-      }
-
-      // Navigate to ExpertList with parameters
-      navigation.navigate('ExpertList', {
-        userId: username,
-        isCaller,
-        callId: generatedCallId,
-        recipientId,
-      });
     } catch (error) {
       console.error('Login failed', error);
       Alert.alert('Login Failed', 'Invalid username or password');
@@ -69,20 +52,12 @@ export default function LoginScreen() {
           onChangeText={setPassword}
           secureTextEntry
         />
-        <TextInput
-          style={tailwind('border border-gray-300 p-3 rounded-lg bg-white text-base mb-4 text-black')}
-          placeholder="Call ID (required for user2)"
-          value={callId}
-          onChangeText={setCallId}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
       </View>
       <Button
         title="Login"
         color="#1976D2"
         onPress={handleLogin}
-        disabled={!username || !password || (!callId && username === 'user2')}
+        disabled={!username || !password}
       />
     </View>
   );
