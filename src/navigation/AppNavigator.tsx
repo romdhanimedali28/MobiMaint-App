@@ -7,6 +7,9 @@ import WorkOrderDetails from '../screens/WorkerOrderDetails';
 import ExpertListScreen from '../screens/ExpertListScreen';
 import ExpertHomeScreen from '../screens/ExpertHomeScreen';
 import VideoCallScreen from '../screens/VideoCallScreen';
+import ProfileScreen from '../screens/ProfileScreen';
+import AIScreen from '../screens/AIScreen';
+import MainPageScreen from '../screens/MainPageScreen'
 import { RootStackParamList } from '../types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -22,18 +25,22 @@ export default function AppNavigator() {
       <Stack.Screen 
         name="Login" 
         component={LoginScreen} 
-        options={{ title: 'Login' }} 
+        options={{ headerShown: false }} // Already set in LoginScreen
       />
-       <Stack.Screen 
+      <Stack.Screen name="Main"
+       component={MainPageScreen} 
+       options={{ headerShown: false }} />
+
+      <Stack.Screen 
         name="Home" 
         component={HomeScreen} 
-        options={{ title: 'Home' }} 
+        options={{ headerShown: false }} // Remove app bar
       /> 
       <Stack.Screen 
-      name="WorkOrderDetails" 
-      component={WorkOrderDetails} 
-      options={{ title: 'WorkOrderDetails' }} 
-    />
+        name="WorkOrderDetails" 
+        component={WorkOrderDetails} 
+        options={{ title: 'Work Order Details' }} 
+      />
       <Stack.Screen 
         name="ExpertList" 
         component={ExpertListScreen} 
@@ -52,6 +59,16 @@ export default function AppNavigator() {
           headerShown: false,
           gestureEnabled: false,
         }}
+      />
+      <Stack.Screen 
+        name="Profile" 
+        component={ProfileScreen} 
+        options={{ headerShown: false }} // Remove app bar
+      />
+      <Stack.Screen 
+        name="AI" 
+        component={AIScreen} 
+        options={{ headerShown: false }} // Remove app bar
       />
     </Stack.Navigator>
   );
