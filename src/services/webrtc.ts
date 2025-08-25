@@ -20,45 +20,48 @@ export const WEBRTC_CONFIG = {
     { urls: 'stun:stun2.l.google.com:19302' },
     { urls: 'stun:stun3.l.google.com:19302' },
     { urls: 'stun:stun4.l.google.com:19302' },
+
     
-    // Public TURN servers (you should replace these with your own)
-    {
-      urls: 'turn:openrelay.metered.ca:80',
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443',
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    },
+    { urls: 'turn:speed.cloudflare.com:50000',
+      username: 'f06e89a6870819f7334046349af683f75946d7e9ffd5ffc1b3bdb3e288f42e9799cc4beacec107d0240ecb7f3dfa036f213c3aec6acd2b25a4459b7f6e1c66ea', 
+      credential: 'aba9b169546eb6dcc7bfb1cdf34544cf95b5161d602e3b5fa7c8342b2e9802fb' },
+    // {
+    //   urls: 'turn:openrelay.metered.ca:80',
+    //   username: 'openrelayproject',
+    //   credential: 'openrelayproject'
+    // },
+    // {
+    //   urls: 'turn:openrelay.metered.ca:443',
+    //   username: 'openrelayproject',
+    //   credential: 'openrelayproject'
+    // },
+    // {
+    //   urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+    //   username: 'openrelayproject',
+    //   credential: 'openrelayproject'
+    // },
     
-    // Alternative TURN servers for better connectivity
-    {
-      urls: 'turn:a.relay.metered.ca:80',
-      username: 'a1f9c5ce691b0ef52cbbf8c6',
-      credential: 'sPNCDHRaO1LzfpGm'
-    },
-    {
-      urls: 'turn:a.relay.metered.ca:80?transport=tcp',
-      username: 'a1f9c5ce691b0ef52cbbf8c6',
-      credential: 'sPNCDHRaO1LzfpGm'
-    },
-    {
-      urls: 'turn:a.relay.metered.ca:443',
-      username: 'a1f9c5ce691b0ef52cbbf8c6',
-      credential: 'sPNCDHRaO1LzfpGm'
-    },
-    {
-      urls: 'turn:a.relay.metered.ca:443?transport=tcp',
-      username: 'a1f9c5ce691b0ef52cbbf8c6',
-      credential: 'sPNCDHRaO1LzfpGm'
-    },
+    // // Alternative TURN servers for better connectivity
+    // {
+    //   urls: 'turn:a.relay.metered.ca:80',
+    //   username: 'a1f9c5ce691b0ef52cbbf8c6',
+    //   credential: 'sPNCDHRaO1LzfpGm'
+    // },
+    // {
+    //   urls: 'turn:a.relay.metered.ca:80?transport=tcp',
+    //   username: 'a1f9c5ce691b0ef52cbbf8c6',
+    //   credential: 'sPNCDHRaO1LzfpGm'
+    // },
+    // {
+    //   urls: 'turn:a.relay.metered.ca:443',
+    //   username: 'a1f9c5ce691b0ef52cbbf8c6',
+    //   credential: 'sPNCDHRaO1LzfpGm'
+    // },
+    // {
+    //   urls: 'turn:a.relay.metered.ca:443?transport=tcp',
+    //   username: 'a1f9c5ce691b0ef52cbbf8c6',
+    //   credential: 'sPNCDHRaO1LzfpGm'
+    // },
     
    
   ],
@@ -74,7 +77,7 @@ export const SOCKET_CONFIG = {
   reconnectionDelay: 1000,
   reconnectionDelayMax: 5000,
   maxReconnectionAttempts: 5,
-  timeout: 200000,
+  timeout: 20000,
   forceNew: true,
   transports: ['websocket']
 };
@@ -426,29 +429,32 @@ export class WebRTCManager {
   }
 }
 
-interface TurnCredentials {
-  urls: string;
-  username: string;
-  credential: string;
-}
+// interface TurnCredentials {
+//   urls: string;
+//   username: string;
+//   credential: string;
+// }
 
-export const getTurnServerCredentials = async (): Promise<TurnCredentials> => {
-  return {
-    urls: 'turn:openrelay.metered.ca:80',
-    username: 'openrelayproject',
-    credential: 'openrelayproject'
-  };
-};
+// export const getTurnServerCredentials = async (): Promise<TurnCredentials> => {
+//   return {
+//     urls: 'turn:openrelay.metered.ca:80',
+//     username: 'openrelayproject',
+//     credential: 'openrelayproject'
+//   };
+// };
 
 // Test connectivity to TURN servers
 export const testTurnConnectivity = async (): Promise<boolean> => {
   try {
     const testPC = new RTCPeerConnection(WEBRTC_CONFIG);
+    console.log("test PCcccccccc",testPC);
     
     return new Promise((resolve) => {
       let hasConnected = false;
       
       (testPC as any).oniceconnectionstatechange = () => {
+        console.log("coonect ",testPC.iceConnectionState );
+        
         if (testPC.iceConnectionState === 'connected' || testPC.iceConnectionState === 'completed') {
           hasConnected = true;
           resolve(true);
@@ -456,6 +462,7 @@ export const testTurnConnectivity = async (): Promise<boolean> => {
           resolve(false);
         }
       };
+      console.log("66666666666666",hasConnected);
       
       // Create a test offer
       testPC.createOffer([]).then(offer => {
@@ -468,7 +475,7 @@ export const testTurnConnectivity = async (): Promise<boolean> => {
           resolve(false);
         }
         testPC.close();
-      }, 10000);
+      }, 20000);
     });
   } catch (error) {
     console.error('Error testing TURN connectivity:', error);

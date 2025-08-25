@@ -12,6 +12,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'VideoCall'>;
 
 export default function VideoCallScreen({ route, navigation }: Props) {
   const { callId, recipientId, userId, role, isCaller } = route.params;
+  
   const { backendUrl } = useBackend();
   
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -29,6 +30,7 @@ export default function VideoCallScreen({ route, navigation }: Props) {
   const offerSent = useRef(false);
   const answerSent = useRef(false);
 
+  
   const requestPermissions = useCallback(async () => {
     try {
       const permissions = Platform.select({
@@ -77,10 +79,10 @@ export default function VideoCallScreen({ route, navigation }: Props) {
   const endCall = useCallback(() => {
     console.log('Ending call');
     setConnectionStatus('Ending call...');
-    webrtcManager.current.cleanup();
+    // webrtcManager.current.cleanup();
     if (socketRef.current) {
       socketRef.current.emit('end-call', { callId, to: recipientId });
-      socketRef.current.disconnect();
+      // socketRef.current.disconnect();
     }
     setLocalStream(null);
     setRemoteStream(null);
@@ -102,12 +104,15 @@ Call ID: ${callId}
   }, [userId, role, isCaller, callId]);
 
   const initializeSocket = useCallback(() => {
+    console.log("init soocket");
+
     if (!backendUrl) {
       console.error('Backend URL not configured');
       Alert.alert('Error', 'Backend URL not configured');
       navigation.goBack();
       return null;
     }
+    console.log("init soocket backend url yyyyyyyyyy" ,backendUrl);
 
     setConnectionStatus('Connecting to signaling server...');
     const socket = io(backendUrl, {
@@ -201,6 +206,8 @@ Call ID: ${callId}
   }, [callId, userId, role, isCaller, backendUrl, navigation, endCall]);
 
   const setupWebRTC = useCallback(() => {
+    console.log("setup webrtc");
+    
     webrtcManager.current.setRemoteStreamHandler((remoteStream) => {
       console.log('Remote stream received:', !!remoteStream);
       setRemoteStream(remoteStream);
@@ -239,9 +246,15 @@ Call ID: ${callId}
   }, []);
 
   const testConnection = useCallback(async () => {
+    console.log("Testing TURN connectivity 33333333333333");
+
     setConnectionStatus('Testing TURN connectivity...');
     const isConnected = await testTurnConnectivity();
+    console.log("44444444444444" ,isConnected);
+
     if (isConnected) {
+      console.log("5555 TURN servers accessible");
+
       setConnectionStatus('TURN servers accessible');
     } else {
       setConnectionStatus('TURN servers not accessible');
@@ -253,35 +266,54 @@ Call ID: ${callId}
   }, []);
 
   useEffect(() => {
+    console.log("111111");
+    
     const initialize = async () => {
+      console.log("222222");
+
       const hasPermissions = await requestPermissions();
       if (!hasPermissions) return;
 
       // Test TURN connectivity first
       await testConnection();
+console.log("77777777777777777 after test coonection line 272");
 
       const stream = await initializeLocalStream();
+      console.log("8888888888888888888 after init local ",stream);
+
       if (!stream) return;
+      console.log("999999999999999999 areturn strem ");
 
       setupWebRTC();
+      console.log("999999999999999999 wetbupwebrtc ");
+
       socketRef.current = initializeSocket();
+      console.log("100000000000000000000000  areturn init socket ");
+
     };
 
     initialize();
 
     // Update debug info every 3 seconds
-    const debugInterval = setInterval(updateDebugInfo, 3000);
+    // const debugInterval = setInterval(updateDebugInfo, 3000);
 
-    return () => {
-      clearInterval(debugInterval);
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-      const webrtc = webrtcManager.current; // Copy ref value for cleanup
-      webrtc.cleanup();
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
-    };
-  }, [initializeLocalStream, requestPermissions, setupWebRTC, initializeSocket, testConnection, updateDebugInfo]);
+    // return () => {
+    //   console.log("colose seeee");
+      
+    //   clearInterval(debugInterval);
+    //   // eslint-disable-next-line react-hooks/exhaustive-deps
+    //   const webrtc = webrtcManager.current; // Copy ref value for cleanup
+    //   webrtc.cleanup();
+    //   if (socketRef.current) {
+    //     socketRef.current.disconnect();
+    //   }
+    //   socketRef.current.on('connect', () => {
+    //     console.log(`Socket connected for user ${userId}`);
+    //     socketRef.current.emit('register', { userId });
+    //   });
+    
+    // };
+  }, [initializeLocalStream, requestPermissions, setupWebRTC, initializeSocket, testConnection, updateDebugInfo, userId]);
 
   const showDebugInfo = () => {
     Alert.alert('Debug Information', debugInfo);

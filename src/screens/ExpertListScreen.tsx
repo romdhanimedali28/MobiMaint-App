@@ -8,7 +8,6 @@ import { getConnectedExperts } from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import io from 'socket.io-client';
 import axios from 'axios';
-import { API_URL_Base} from '../utils/const';
 type Props = NativeStackScreenProps<RootStackParamList, 'ExpertList'>;
 
 interface Expert {
@@ -134,7 +133,7 @@ export default function ExpertListScreen({ navigation, route }: Props) {
       try {
         const backendUrl = await AsyncStorage.getItem('backendUrl');
         if (!backendUrl) throw new Error('Backend URL not set');
-        const response = await axios.post(`${API_URL_Base}/api/create-call`, { userId });
+        const response = await axios.post(`${backendUrl}/api/create-call`, { userId });
         validCallId = response.data.callId;
         setCallId(validCallId);
         setCallingExpert(expert.name);

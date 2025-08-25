@@ -15,7 +15,10 @@ export type Expert = {
 export type RootStackParamList = {
   Backend: undefined;
   Login: undefined;
-  Home: { userId: string; role: 'Technician' | 'Expert' };
+  Main:undefined;
+  Home: undefined;
+  Profile: undefined;
+  AI: undefined;
   WorkOrderDetails: { workOrder: WorkOrder };
   ExpertList: { userId: string; role: 'Technician' | 'Expert' };
   ExpertHome: { userId: string; role: 'Technician' | 'Expert' };

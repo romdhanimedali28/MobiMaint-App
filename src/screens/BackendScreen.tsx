@@ -1,33 +1,26 @@
 import React, { useState } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { View, TextInput, Button, Text, Image, StyleSheet, Alert } from 'react-native';
+import {
+  View,
+  TextInput,
+  Text,
+  StyleSheet,
+  Alert,
+  TouchableOpacity,
+} from 'react-native';
+import Logo from '../components/Logo'; // Converted SVG component
 import { RootStackParamList } from '../types';
 import { useBackend } from '../context/BackendContext';
 import { tailwind } from '../utils/tailwind';
 import { API_URL_Base } from '../utils/const';
 
 export default function BackendScreen() {
-  const [url, setUrl] = useState(API_URL_Base); // Pre-fill for testing
+  const [url, setUrl] = useState(API_URL_Base);
   const { setBackendUrl } = useBackend();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
-  // const isValidUrl = (url: string): boolean => {
-  //   const urlPattern = /^https?:\/\/([a-zA-Z0-9-]+\.)*[a-zA-Z0-9-]+\.[a-zA-Z]{2,}(:\d+)?$/;
-  //   return urlPattern.test(url);
-  // };
-
   const handleSubmit = async () => {
-    // if (!url) {
-    //   Alert.alert('Error', 'Please enter a backend URL');
-    //   return;
-    // }
-
-    // if (!isValidUrl(url)) {
-    //   Alert.alert('Error', 'Please enter a valid URL (e.g., http://192.168.1.112:3000)');
-    //   return;
-    // }
-
     try {
       await setBackendUrl(url);
       navigation.navigate('Login');
@@ -39,14 +32,13 @@ export default function BackendScreen() {
 
   return (
     <View style={styles.container}>
-      <Image
-        source={{ uri: 'https://img.freepik.com/free-vector/bird-colorful-logo-gradient-vector_343694-1365.jpg?semt=ais_hybrid&w=740' }}
-        style={styles.logo}
-      />
-      <Text style={styles.title}>Configure Backend</Text>
+      <Logo width={120} height={120} style={styles.logo} />
+      <Text style={styles.title}>SmarTech-TN</Text>
       <View style={styles.inputContainer}>
         <TextInput
-          style={tailwind('border border-gray-300 p-3 rounded-lg bg-white text-base text-black')}
+          style={tailwind(
+            'border border-gray-300 p-3 rounded-lg bg-white text-base text-black'
+          )}
           placeholder="http://192.168.1.112:3000"
           value={url}
           onChangeText={setUrl}
@@ -54,12 +46,13 @@ export default function BackendScreen() {
           autoCorrect={false}
         />
       </View>
-      <Button
-        title="Connect"
-        color="#1976D2"
+      <TouchableOpacity
+        style={styles.button}
         onPress={handleSubmit}
         disabled={!url}
-      />
+      >
+        <Text style={styles.buttonText}>Connect</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -67,18 +60,16 @@ export default function BackendScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
   },
   logo: {
-    width: 120,
-    height: 120,
     marginBottom: 20,
   },
   title: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: 'bold',
     color: '#1E3A8A',
     marginBottom: 30,
@@ -86,6 +77,17 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     width: '100%',
-    marginBottom: 20,
+    marginBottom: 24,
+  },
+  button: {
+    backgroundColor: '#1800ad',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+  },
+  buttonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
