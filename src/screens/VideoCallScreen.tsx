@@ -5,16 +5,23 @@ import { check, request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 import { RTCView, MediaStream } from 'react-native-webrtc';
 import io from 'socket.io-client';
 import { RootStackParamList } from '../types';
-import { WebRTCManager, SOCKET_CONFIG, testTurnConnectivity } from '../services/webrtc';
+import { WebRTCManager, SOCKET_CONFIG } from '../services/webrtc';
 import { useBackend } from '../context/BackendContext';
+
+// Import your icons
+import MicIcon from '../../assets/icons/mic.svg';
+import MicOffIcon from '../../assets/icons/mic-off.svg';
+import VideoIcon from '../components/icons/video';
+import VideoOffIcon from '../../assets/icons/video-off.svg';
+import PhoneIcon from '../../assets/icons/phone.svg';
+import CameraFlipIcon from '../../assets/icons/camera-flip.svg';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'VideoCall'>;
 
 export default function VideoCallScreen({ route, navigation }: Props) {
   const { callId, recipientId, userId, role, isCaller } = route.params;
-  
   const { backendUrl } = useBackend();
-  
+
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [isCallActive, setIsCallActive] = useState(false);
@@ -22,15 +29,86 @@ export default function VideoCallScreen({ route, navigation }: Props) {
   const [connectionStatus, setConnectionStatus] = useState('Initializing...');
   const [micEnabled, setMicEnabled] = useState(true);
   const [cameraEnabled, setCameraEnabled] = useState(true);
-  const [debugInfo, setDebugInfo] = useState<string>('');
-  
-  const webrtcManager = useRef(new WebRTCManager());
+  const [connectionFailed, setConnectionFailed] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(false);
+
+  const webrtcManager = useRef<WebRTCManager | null>(null);
   const socketRef = useRef<any>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const offerSent = useRef(false);
   const answerSent = useRef(false);
+  const connectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isCleaningUp = useRef(false);
 
-  
+  // Test TURN server connectivity (kept as requested)
+  const testTurnConnectivity = useCallback(async (): Promise<{ success: boolean; details: string }> => {
+    return new Promise((resolve) => {
+      try {
+        const testPC = new (window as any).RTCPeerConnection({
+          iceServers: [
+            { urls: 'stun:webrtc-medali.japaneast.cloudapp.azure.com:3478' },
+            {
+              urls: [
+                'turn:webrtc-medali.japaneast.cloudapp.azure.com:3478?transport=udp',
+                'turn:webrtc-medali.japaneast.cloudapp.azure.com:3478?transport=tcp',
+              ],
+              username: 'medaliwebrtc',
+              credential: 'MAR+27290+F+WEBRTC#',
+            },
+          ],
+        });
+
+        let candidateTypes: string[] = [];
+        let resolved = false;
+
+        testPC.onicecandidate = (event: any) => {
+          if (event.candidate) {
+            const candidate = event.candidate.candidate;
+            if (candidate.includes('typ host')) candidateTypes.push('host');
+            if (candidate.includes('typ srflx')) candidateTypes.push('srflx');
+            if (candidate.includes('typ relay')) candidateTypes.push('relay');
+            if (candidate.includes('typ relay') && !resolved) {
+              resolved = true;
+              resolve({ success: true, details: `TURN server working. Candidate types: ${candidateTypes.join(', ')}` });
+              testPC.close();
+            }
+          } else if (!resolved) {
+            resolved = true;
+            const success = candidateTypes.length > 0;
+            const message = success
+              ? `ICE gathering complete. Types found: ${candidateTypes.join(', ')}`
+              : 'No ICE candidates generated';
+            resolve({ success, details: message });
+            testPC.close();
+          }
+        };
+
+        testPC.createOffer().then((offer: any) => {
+          return testPC.setLocalDescription(offer);
+        }).catch((error: any) => {
+          if (!resolved) {
+            resolved = true;
+            resolve({ success: false, details: `Error: ${error.message}` });
+            testPC.close();
+          }
+        });
+
+        setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            const message = candidateTypes.length > 0
+              ? `Timeout but found candidates: ${candidateTypes.join(', ')}`
+              : 'Timeout with no candidates';
+            resolve({ success: candidateTypes.includes('relay'), details: message });
+            testPC.close();
+          }
+        }, 10000);
+      } catch (error) {
+        resolve({ success: false, details: `Test failed: ${error}` });
+      }
+    });
+  }, []);
+
   const requestPermissions = useCallback(async () => {
     try {
       const permissions = Platform.select({
@@ -54,22 +132,22 @@ export default function VideoCallScreen({ route, navigation }: Props) {
       }
       return true;
     } catch (error) {
-      console.error('Error requesting permissions:', error);
       return false;
     }
   }, [navigation]);
 
   const initializeLocalStream = useCallback(async () => {
     try {
+      if (!webrtcManager.current) {
+        return null;
+      }
       setConnectionStatus('Accessing camera and microphone...');
       const stream = await webrtcManager.current.getLocalStream();
-      console.log('Local stream initialized:', !!stream);
       setLocalStream(stream);
       localStreamRef.current = stream;
       setConnectionStatus('Media stream ready');
       return stream;
     } catch (error) {
-      console.error('Error initializing local stream:', error);
       setConnectionStatus('Failed to access media devices');
       Alert.alert('Error', 'Could not access camera and microphone');
       return null;
@@ -77,12 +155,12 @@ export default function VideoCallScreen({ route, navigation }: Props) {
   }, []);
 
   const endCall = useCallback(() => {
-    console.log('Ending call');
     setConnectionStatus('Ending call...');
-    // webrtcManager.current.cleanup();
     if (socketRef.current) {
       socketRef.current.emit('end-call', { callId, to: recipientId });
-      // socketRef.current.disconnect();
+    }
+    if (webrtcManager.current) {
+      webrtcManager.current.cleanup();
     }
     setLocalStream(null);
     setRemoteStream(null);
@@ -91,56 +169,46 @@ export default function VideoCallScreen({ route, navigation }: Props) {
     navigation.goBack();
   }, [callId, recipientId, navigation]);
 
-  const updateDebugInfo = useCallback(() => {
-    const stats = webrtcManager.current;
-    const info = `
-Connection: ${stats.getConnectionState()}
-ICE: ${stats.getIceConnectionState()}
-User: ${userId} (${role})
-Is Caller: ${isCaller}
-Call ID: ${callId}
-    `.trim();
-    setDebugInfo(info);
-  }, [userId, role, isCaller, callId]);
-
   const initializeSocket = useCallback(() => {
-    console.log("init soocket");
-
     if (!backendUrl) {
-      console.error('Backend URL not configured');
       Alert.alert('Error', 'Backend URL not configured');
       navigation.goBack();
       return null;
     }
-    console.log("init soocket backend url yyyyyyyyyy" ,backendUrl);
 
-    setConnectionStatus('Connecting to signaling server...');
+    setConnectionStatus(role === 'Technician' ? 'Connecting to server...' : 'Expert connecting...');
     const socket = io(backendUrl, {
       ...SOCKET_CONFIG,
       query: { userId, callId },
     });
 
     socket.on('connect', () => {
-      console.log('Socket connected for user:', userId);
-      setConnectionStatus('Connected to signaling server');
+      setConnectionStatus(role === 'Technician' ? 'Connected to server' : 'Expert connected');
       socket.emit('join-call', { callId, userId, role });
+      setTimeout(() => {
+        if (isConnecting) {
+          setConnectionStatus('Establishing connection...');
+        }
+      }, 10000);
     });
 
     socket.on('user-joined', async (data) => {
-      console.log('User joined:', data);
-      setConnectionStatus('User joined, creating offer...');
-      
       if (data.userId !== userId && isCaller && !offerSent.current) {
         offerSent.current = true;
+        setConnectionStatus('Other user joined, creating offer...');
         try {
+          if (!webrtcManager.current) {
+            setConnectionStatus('WebRTC manager not initialized');
+            return;
+          }
           const offer = await webrtcManager.current.createOffer();
-          console.log('Sending offer to:', data.userId);
           socket.emit('offer', { callId, offer, to: data.userId });
           setConnectionStatus('Offer sent, waiting for answer...');
         } catch (error) {
-          console.error('Error creating offer:', error);
           setConnectionStatus('Failed to create offer');
         }
+      } else if (data.userId !== userId && !isCaller) {
+        setConnectionStatus('Waiting for offer from caller...');
       }
     });
 
@@ -148,13 +216,15 @@ Call ID: ${callId}
       if (data.from !== userId && !isCaller && !answerSent.current) {
         answerSent.current = true;
         try {
-          console.log('Received offer from:', data.from);
           setConnectionStatus('Received offer, creating answer...');
+          if (!webrtcManager.current) {
+            setConnectionStatus('WebRTC manager not initialized');
+            return;
+          }
           const answer = await webrtcManager.current.createAnswer(data.offer);
           socket.emit('answer', { callId, answer, to: data.from });
           setConnectionStatus('Answer sent, establishing connection...');
         } catch (error) {
-          console.error('Error handling offer:', error);
           setConnectionStatus('Failed to handle offer');
         }
       }
@@ -163,12 +233,14 @@ Call ID: ${callId}
     socket.on('answer', async (data) => {
       if (data.from !== userId && isCaller) {
         try {
-          console.log('Received answer from:', data.from);
           setConnectionStatus('Received answer, establishing connection...');
-          await webrtcManager.current.setRemoteDescription(data.answer);
-          setConnectionStatus('Waiting for connection...');
+          if (webrtcManager.current) {
+            await webrtcManager.current.setRemoteDescription(data.answer);
+            setConnectionStatus('Waiting for remote video...');
+          } else {
+            setConnectionStatus('WebRTC manager not initialized');
+          }
         } catch (error) {
-          console.error('Error handling answer:', error);
           setConnectionStatus('Failed to handle answer');
         }
       }
@@ -177,48 +249,60 @@ Call ID: ${callId}
     socket.on('ice-candidate', async (data) => {
       if (data.candidate && data.from !== userId) {
         try {
-          console.log('Received ICE candidate from:', data.from);
-          await webrtcManager.current.addIceCandidate(data.candidate);
+          if (webrtcManager.current) {
+            await webrtcManager.current.addIceCandidate(data.candidate);
+          }
         } catch (error) {
-          console.error('Error adding ICE candidate:', error);
+          // Handle ICE candidate error silently
         }
       }
     });
 
+    socket.on('camera-switched', (data) => {
+      if (data.from !== userId) {
+        // Handle remote camera switch if needed
+      }
+    });
+
     socket.on('call-ended', () => {
-      console.log('Call ended by remote user');
       endCall();
     });
 
-    socket.on('connect_error', (error) => {
-      console.error('Socket connection error:', error);
+    socket.on('connect_error', () => {
       setConnectionStatus('Connection failed');
       Alert.alert('Connection Error', 'Failed to connect to signaling server');
       endCall();
     });
 
     socket.on('disconnect', () => {
-      console.log('Socket disconnected');
       setConnectionStatus('Disconnected from server');
     });
 
+    socket.on('error', () => {
+      setConnectionStatus('Socket error occurred');
+    });
+
     return socket;
-  }, [callId, userId, role, isCaller, backendUrl, navigation, endCall]);
+  }, [callId, userId, role, isCaller, backendUrl, navigation, endCall, isConnecting]);
 
   const setupWebRTC = useCallback(() => {
-    console.log("setup webrtc");
-    
+    if (!webrtcManager.current) {
+      return;
+    }
+
     webrtcManager.current.setRemoteStreamHandler((remoteStream) => {
-      console.log('Remote stream received:', !!remoteStream);
       setRemoteStream(remoteStream);
       setIsCallActive(true);
       setIsConnecting(false);
-      setConnectionStatus('Connected! Video call active');
+      setConnectionStatus('Video call active');
+      if (connectionTimeoutRef.current) {
+        clearTimeout(connectionTimeoutRef.current);
+        connectionTimeoutRef.current = null;
+      }
     });
 
     webrtcManager.current.setIceCandidateHandler((candidate) => {
       if (socketRef.current) {
-        console.log('Sending ICE candidate to:', recipientId);
         socketRef.current.emit('ice-candidate', {
           callId,
           candidate,
@@ -226,180 +310,194 @@ Call ID: ${callId}
         });
       }
     });
-  }, [callId, recipientId]);
+
+    webrtcManager.current.setConnectionEstablishedHandler(() => {
+      setIsCallActive(true);
+      setIsConnecting(false);
+      setConnectionStatus('Video call active');
+      if (connectionTimeoutRef.current) {
+        clearTimeout(connectionTimeoutRef.current);
+        connectionTimeoutRef.current = null;
+      }
+    });
+
+    const checkConnectionState = () => {
+      if (webrtcManager.current && !isCleaningUp.current) {
+        const connectionState = webrtcManager.current.getConnectionState();
+        const iceState = webrtcManager.current.getIceConnectionState();
+        if (connectionState === 'connected' && iceState === 'connected') {
+          setIsCallActive(true);
+          setIsConnecting(false);
+          setConnectionStatus('Video call active');
+          if (connectionTimeoutRef.current) {
+            clearTimeout(connectionTimeoutRef.current);
+            connectionTimeoutRef.current = null;
+          }
+        }
+      }
+    };
+
+    const stateCheckInterval = setInterval(checkConnectionState, 2000);
+    setTimeout(() => {
+      clearInterval(stateCheckInterval);
+    }, 60000);
+  }, [callId, recipientId, isCleaningUp]);
 
   const toggleMic = useCallback(() => {
-    const enabled = webrtcManager.current.toggleAudio();
-    setMicEnabled(enabled);
-    console.log('Microphone toggled:', enabled);
-  }, []);
-
-  const toggleCamera = useCallback(() => {
-    const enabled = webrtcManager.current.toggleVideo();
-    setCameraEnabled(enabled);
-    console.log('Camera toggled:', enabled);
-  }, []);
-
-  const switchCamera = useCallback(async () => {
-    await webrtcManager.current.switchCamera();
-    console.log('Camera switched');
-  }, []);
-
-  const testConnection = useCallback(async () => {
-    console.log("Testing TURN connectivity 33333333333333");
-
-    setConnectionStatus('Testing TURN connectivity...');
-    const isConnected = await testTurnConnectivity();
-    console.log("44444444444444" ,isConnected);
-
-    if (isConnected) {
-      console.log("5555 TURN servers accessible");
-
-      setConnectionStatus('TURN servers accessible');
-    } else {
-      setConnectionStatus('TURN servers not accessible');
-      Alert.alert(
-        'Connection Issue',
-        'TURN servers are not accessible. This may cause connection issues on different networks.'
-      );
+    if (webrtcManager.current) {
+      const enabled = webrtcManager.current.toggleAudio();
+      setMicEnabled(enabled);
     }
   }, []);
 
+  const toggleCamera = useCallback(() => {
+    if (webrtcManager.current) {
+      const enabled = webrtcManager.current.toggleVideo();
+      setCameraEnabled(enabled);
+    }
+  }, []);
+
+  const switchCamera = useCallback(async () => {
+    try {
+      if (webrtcManager.current) {
+        await webrtcManager.current.switchCamera();
+        if (socketRef.current) {
+          socketRef.current.emit('camera-switched', {
+            callId,
+            from: userId,
+            to: recipientId,
+          });
+        }
+      }
+    } catch (error) {
+      // Handle camera switch error silently
+    }
+  }, [callId, userId, recipientId]);
+
   useEffect(() => {
-    console.log("111111");
-    
+    if (isInitializing || isCleaningUp.current) {
+      return;
+    }
+
+    setIsInitializing(true);
+
     const initialize = async () => {
-      console.log("222222");
+      try {
+        if (!webrtcManager.current) {
+          webrtcManager.current = new WebRTCManager();
+        }
 
-      const hasPermissions = await requestPermissions();
-      if (!hasPermissions) return;
+        const hasPermissions = await requestPermissions();
+        if (!hasPermissions) {
+          setIsInitializing(false);
+          return;
+        }
 
-      // Test TURN connectivity first
-      await testConnection();
-console.log("77777777777777777 after test coonection line 272");
+        await testTurnConnectivity();
 
-      const stream = await initializeLocalStream();
-      console.log("8888888888888888888 after init local ",stream);
+        const stream = await initializeLocalStream();
+        if (!stream) {
+          setIsInitializing(false);
+          return;
+        }
 
-      if (!stream) return;
-      console.log("999999999999999999 areturn strem ");
+        setupWebRTC();
+        socketRef.current = initializeSocket();
 
-      setupWebRTC();
-      console.log("999999999999999999 wetbupwebrtc ");
-
-      socketRef.current = initializeSocket();
-      console.log("100000000000000000000000  areturn init socket ");
-
+        connectionTimeoutRef.current = setTimeout(async () => {
+          if (isConnecting && !isCallActive && !isCleaningUp.current) {
+            setConnectionFailed(true);
+            setIsConnecting(false);
+            setConnectionStatus('Connection timeout');
+          }
+        }, 45000);
+      } catch (error) {
+        setConnectionStatus('Initialization failed');
+        Alert.alert('Initialization Error', 'Failed to initialize video call. Please try again.');
+      } finally {
+        setIsInitializing(false);
+      }
     };
 
     initialize();
 
-    // Update debug info every 3 seconds
-    // const debugInterval = setInterval(updateDebugInfo, 3000);
-
-    // return () => {
-    //   console.log("colose seeee");
-      
-    //   clearInterval(debugInterval);
-    //   // eslint-disable-next-line react-hooks/exhaustive-deps
-    //   const webrtc = webrtcManager.current; // Copy ref value for cleanup
-    //   webrtc.cleanup();
-    //   if (socketRef.current) {
-    //     socketRef.current.disconnect();
-    //   }
-    //   socketRef.current.on('connect', () => {
-    //     console.log(`Socket connected for user ${userId}`);
-    //     socketRef.current.emit('register', { userId });
-    //   });
-    
-    // };
-  }, [initializeLocalStream, requestPermissions, setupWebRTC, initializeSocket, testConnection, updateDebugInfo, userId]);
-
-  const showDebugInfo = () => {
-    Alert.alert('Debug Information', debugInfo);
-  };
+    return () => {
+      isCleaningUp.current = true;
+      if (connectionTimeoutRef.current) {
+        clearTimeout(connectionTimeoutRef.current);
+      }
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+      if (webrtcManager.current) {
+        webrtcManager.current.cleanup();
+        webrtcManager.current = null;
+      }
+    };
+  }, []);
 
   return (
     <View style={styles.container}>
-      {/* Connection Status */}
       {isConnecting && (
-        <View style={styles.statusContainer}>
-          <ActivityIndicator size="large" color="#fff" />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#2196F3" />
           <Text style={styles.statusText}>{connectionStatus}</Text>
         </View>
       )}
-
-      {/* Remote Video */}
-      {remoteStream ? (
-        <RTCView
-          streamURL={remoteStream.toURL()}
-          style={styles.remoteVideo}
-          objectFit="cover"
-          mirror={false}
-        />
-      ) : (
-        <View style={styles.remoteVideo}>
-          <Text style={styles.statusText}>Waiting for remote video...</Text>
-        </View>
-      )}
-
-      {/* Local Video */}
-      {localStream ? (
-        <RTCView
-          streamURL={localStream.toURL()}
-          style={styles.localVideo}
-          objectFit="cover"
-          mirror={true}
-        />
-      ) : (
-        <View style={styles.localVideo}>
-          <Text style={styles.statusText}>No local video</Text>
-        </View>
-      )}
-
-      {/* Controls */}
-      <View style={styles.controls}>
-        <TouchableOpacity
-          style={[styles.controlButton, !micEnabled && styles.disabledButton]}
-          onPress={toggleMic}
-        >
-          <Text style={styles.buttonText}>{micEnabled ? '🎤' : '🔇'}</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={[styles.controlButton, !cameraEnabled && styles.disabledButton]}
-          onPress={toggleCamera}
-        >
-          <Text style={styles.buttonText}>{cameraEnabled ? '📹' : '📷'}</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={styles.controlButton}
-          onPress={switchCamera}
-        >
-          <Text style={styles.buttonText}>🔄</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.controlButton, styles.endCallButton]}
-          onPress={endCall}
-        >
-          <Text style={styles.buttonText}>📞</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Debug Info Button */}
-      <TouchableOpacity
-        style={styles.debugButton}
-        onPress={showDebugInfo}
-      >
-        <Text style={styles.debugButtonText}>Debug</Text>
-      </TouchableOpacity>
-
-      {/* Call Status Indicator */}
+      
       {isCallActive && (
-        <View style={styles.callStatusIndicator}>
-          <Text style={styles.callStatusText}>• Live</Text>
+        <>
+          <View style={styles.videoContainer}>
+            {remoteStream && (
+              <RTCView streamURL={remoteStream.toURL()} style={styles.remoteVideo} objectFit="cover" />
+            )}
+            {localStream && (
+              <RTCView streamURL={localStream.toURL()} style={styles.localVideo} objectFit="cover" />
+            )}
+          </View>
+          
+          <View style={styles.controlsContainer}>
+            <TouchableOpacity 
+              style={[styles.controlButton, !micEnabled && styles.disabledButton]} 
+              onPress={toggleMic}
+            >
+              {micEnabled ? (
+                <MicIcon color="white" height={24} width={24} />
+              ) : (
+                <MicOffIcon color="white" height={24} width={24} />
+              )}
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.controlButton, !cameraEnabled && styles.disabledButton]} 
+              onPress={toggleCamera}
+            >
+              {cameraEnabled ? (
+                <VideoIcon color="white"size={24} />
+              ) : (
+                <VideoOffIcon color="white" height={24} width={24} />
+              )}
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.controlButton} onPress={switchCamera}>
+              <CameraFlipIcon color="white" height={24} width={24} />
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={[styles.controlButton, styles.endCallButton]} onPress={endCall}>
+              <PhoneIcon color="white" height={24} width={24} />
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
+      
+      {connectionFailed && (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Connection Failed</Text>
+          <Text style={styles.errorSubText}>Please check your network and try again.</Text>
+          <TouchableOpacity style={[styles.controlButton, styles.endCallButton]} onPress={endCall}>
+            <Text style={styles.controlButtonText}>Back</Text>
+          </TouchableOpacity>
         </View>
       )}
     </View>
@@ -411,99 +509,95 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-  statusContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+  loadingContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#000',
+  },
+  videoContainer: {
+    flex: 1,
+    position: 'relative',
+  },
+  remoteVideo: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#000',
+  },
+  localVideo: {
+    position: 'absolute',
+    top: 40,
+    right: 20,
+    width: 120,
+    height: 160,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#fff',
+    backgroundColor: '#000',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  controlsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    zIndex: 1000,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+  },
+  controlButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 10,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  disabledButton: {
+    backgroundColor: 'rgba(220, 53, 69, 0.8)',
+    borderColor: 'rgba(220, 53, 69, 1)',
+  },
+  endCallButton: {
+    backgroundColor: 'rgba(220, 53, 69, 0.9)',
+    borderColor: '#dc3545',
+  },
+  controlButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   statusText: {
     color: '#fff',
     fontSize: 16,
+    marginTop: 20,
     textAlign: 'center',
-    marginTop: 10,
     paddingHorizontal: 20,
   },
-  remoteVideo: {
+  errorContainer: {
     flex: 1,
-    backgroundColor: '#222',
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#000',
+    paddingHorizontal: 20,
   },
-  localVideo: {
-    position: 'absolute',
-    top: 50,
-    right: 20,
-    width: 120,
-    height: 160,
-    backgroundColor: '#333',
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: '#fff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
-  controls: {
-    position: 'absolute',
-    bottom: 50,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    paddingHorizontal: 40,
-  },
-  controlButton: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  disabledButton: {
-    backgroundColor: 'rgba(255, 0, 0, 0.3)',
-    borderColor: '#ff0000',
-  },
-  endCallButton: {
-    backgroundColor: 'rgba(255, 0, 0, 0.8)',
-    borderColor: '#ff0000',
-  },
-  buttonText: {
+  errorText: {
+    color: '#F44336',
     fontSize: 24,
-    color: '#fff',
-  },
-  debugButton: {
-    position: 'absolute',
-    top: 50,
-    left: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-  },
-  debugButtonText: {
-    color: '#fff',
-    fontSize: 12,
-  },
-  callStatusIndicator: {
-    position: 'absolute',
-    top: 20,
-    left: 20,
-    right: 20,
-    alignItems: 'center',
-  },
-  callStatusText: {
-    color: '#00ff00',
-    fontSize: 16,
     fontWeight: 'bold',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  errorSubText: {
+    color: '#fff',
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 30,
+    lineHeight: 22,
   },
 });

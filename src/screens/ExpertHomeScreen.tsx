@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useCallback } from 'react';
-import { View, Text, Image, Button, StyleSheet, Alert } from 'react-native';
+import { View, Text, StyleSheet, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import io from 'socket.io-client';
+import Logo from '../components/Logo'; // Adjust path as needed
 
 type Props = {
   route: {
@@ -24,8 +25,8 @@ export default function ExpertHomeScreen({ route }: Props) {
     const backendUrl = await AsyncStorage.getItem('backendUrl');
     if (backendUrl) {
       socket.current = io(backendUrl, { transports: ['websocket'] });
+      
       socket.current.on('connect', () => {
-        console.log(`Socket connected for user ${userId}`);
         socket.current.emit('register', { userId });
       });
 
@@ -37,7 +38,12 @@ export default function ExpertHomeScreen({ route }: Props) {
             {
               text: 'Accept',
               onPress: () => {
-                socket.current.emit('call-response', { callId, from: userId, to: from, accepted: true });
+                socket.current.emit('call-response', { 
+                  callId, 
+                  from: userId, 
+                  to: from, 
+                  accepted: true 
+                });
                 navigation.navigate('VideoCall', {
                   userId,
                   role,
@@ -48,8 +54,14 @@ export default function ExpertHomeScreen({ route }: Props) {
               },
             },
             {
-              text: 'Cancel',
-              onPress: () => socket.current.emit('call-response', { callId, from: userId, to: from, accepted: false }),
+              text: 'Decline',
+              style: 'cancel',
+              onPress: () => socket.current.emit('call-response', { 
+                callId, 
+                from: userId, 
+                to: from, 
+                accepted: false 
+              }),
             },
           ],
           { cancelable: false }
@@ -57,15 +69,13 @@ export default function ExpertHomeScreen({ route }: Props) {
       });
 
       socket.current.on('error', ({ message }) => {
-        console.error('Socket error:', message);
-        Alert.alert('Error', message);
+        Alert.alert('Connection Error', message);
       });
     }
   }, [userId, role, navigation]);
 
   useEffect(() => {
     setupSocket();
-
     return () => {
       if (socket.current) {
         socket.current.disconnect();
@@ -73,23 +83,28 @@ export default function ExpertHomeScreen({ route }: Props) {
     };
   }, [setupSocket]);
 
-  const handleNavigateToExpertList = () => {
-    navigation.navigate('ExpertList', { userId, role });
-  };
-
   return (
     <View style={styles.container}>
-      <Image
-        source={{ uri: 'https://img.freepik.com/free-icon/user_318-159711.jpg' }}
-        style={styles.icon}
-      />
-      <Text style={styles.title}>Expert Dashboard</Text>
-      <Text style={styles.subtitle}>Welcome, {userId} ({role})</Text>
-      <Button
-        title="Go to Expert List (Test)"
-        color="#1976D2"
-        onPress={handleNavigateToExpertList}
-      />
+      <View style={styles.content}>
+        <Logo width={120} height={120} style={styles.logo} />
+        
+        <Text style={styles.title}>Expert Dashboard</Text>
+        
+        <Text style={styles.welcomeText}>
+          Welcome, {userId}
+        </Text>
+        
+        <View style={styles.statusContainer}>
+          <View style={styles.statusIndicator} />
+          <Text style={styles.statusText}>
+            Waiting for incoming calls from technicians
+          </Text>
+        </View>
+        
+        <Text style={styles.instructionText}>
+          You will receive a notification when a technician requests assistance
+        </Text>
+      </View>
     </View>
   );
 }
@@ -97,27 +112,64 @@ export default function ExpertHomeScreen({ route }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
+    backgroundColor: '#f8f9fa',
+  },
+  content: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 30,
   },
-  icon: {
-    width: 100,
-    height: 100,
-    marginBottom: 20,
+  logo: {
+    marginBottom: 30,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
-    color: '#1E3A8A',
-    marginBottom: 10,
+    color: '#212529',
+    marginBottom: 15,
     textAlign: 'center',
   },
-  subtitle: {
+  welcomeText: {
     fontSize: 18,
-    color: '#333',
-    marginBottom: 20,
+    color: '#495057',
+    marginBottom: 40,
     textAlign: 'center',
+  },
+  statusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  statusIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#28a745',
+    marginRight: 12,
+  },
+  statusText: {
+    fontSize: 16,
+    color: '#6c757d',
+    fontWeight: '500',
+  },
+  instructionText: {
+    fontSize: 14,
+    color: '#6c757d',
+    textAlign: 'center',
+    lineHeight: 20,
+    opacity: 0.8,
   },
 });

@@ -26,7 +26,7 @@ export default function LoginScreen() {
 
       // Navigate based on role
       if (role === 'Technician') {
-        navigation.navigate('Main');
+        navigation.navigate('Main')
       } else if (role === 'Expert') {
         navigation.navigate('ExpertHome', { userId, role });
       }

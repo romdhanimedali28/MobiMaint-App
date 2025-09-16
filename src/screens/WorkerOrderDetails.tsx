@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
+import VideoIcon from '../components/icons/video'; // Import your VideoIcon component
 
 type Props = NativeStackScreenProps<RootStackParamList, 'WorkOrderDetails'>;
 
@@ -24,7 +25,7 @@ const WorkOrderDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
       case 'INPRG':
         return '#FF9800'; // Orange
       case 'APPR':
-        return '#2196F3'; // Blue
+        return '#1800ad'; // Changed to new blue
       case 'WAPPR':
         return '#9C27B0'; // Purple
       case 'WSCH':
@@ -89,8 +90,6 @@ const WorkOrderDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
     });
   };
 
- 
-
   const handleCallExpert = () => {
     navigation.navigate('ExpertList', { userId: 'user1', role: 'Technician' });
   };
@@ -116,7 +115,9 @@ const WorkOrderDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
 
   return (
     <View style={styles.container}>
-     
+      <View style={styles.titleHeader}>
+        <Text style={styles.pageTitle}>Work Order Details</Text>
+      </View>
       <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
         <View style={styles.mainCard}>
           <View style={styles.mainHeader}>
@@ -192,7 +193,7 @@ const WorkOrderDetailsScreen: React.FC<Props> = ({ navigation, route }) => {
       </ScrollView>
 
       <TouchableOpacity style={styles.fab} onPress={handleCallExpert}>
-        <Text style={styles.fabIcon}>📞</Text>
+        <VideoIcon color="white" size={24} />
       </TouchableOpacity>
     </View>
   );
@@ -203,43 +204,25 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8f9fa',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  titleHeader: {
     backgroundColor: '#fff',
-    paddingTop: 60,
-    paddingBottom: 20,
+    paddingTop: 10,
+    paddingBottom: 10,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#e9ecef',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.05,
     shadowRadius: 3.84,
-    elevation: 5,
+    elevation: 3,
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#007AFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  backButtonText: {
-    color: '#fff',
+  pageTitle: {
     fontSize: 24,
-    fontWeight: 'bold',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '600',
     color: '#212529',
-    flex: 1,
     textAlign: 'center',
-  },
-  headerSpacer: {
-    width: 40,
+    letterSpacing: 0.5,
   },
   scrollContainer: {
     flex: 1,
@@ -255,7 +238,7 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
     elevation: 5,
     borderLeftWidth: 4,
-    borderLeftColor: '#007AFF',
+    borderLeftColor: '#1800ad', // Changed to new blue
   },
   mainHeader: {
     flexDirection: 'row',
@@ -266,7 +249,7 @@ const styles = StyleSheet.create({
   woNumber: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#007AFF',
+    color: '#1800ad', // Changed to new blue
     flex: 1,
   },
   badgeContainer: {
@@ -304,7 +287,7 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     borderLeftWidth: 3,
-    borderLeftColor: '#007AFF',
+    borderLeftColor: '#1800ad', // Changed to new blue
   },
   statusDescription: {
     fontSize: 14,
@@ -329,7 +312,7 @@ const styles = StyleSheet.create({
     color: '#212529',
     marginBottom: 16,
     borderBottomWidth: 2,
-    borderBottomColor: '#007AFF',
+    borderBottomColor: '#1800ad', // Changed to new blue
     paddingBottom: 8,
   },
   detailRow: {
@@ -371,7 +354,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#1800ad', // Changed to new blue
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -379,10 +362,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 3.84,
     elevation: 5,
-  },
-  fabIcon: {
-    fontSize: 24,
-    color: '#fff',
   },
 });
 
