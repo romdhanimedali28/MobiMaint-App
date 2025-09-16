@@ -46,15 +46,9 @@ sequenceDiagram
     Server->>Expert: Incoming call notification
     Expert->>Server: Accept/Decline response
     Server->>Technician: Call acceptance confirmation
-    
-    Note over Technician,Expert: WebRTC Negotiation
     Technician->>Expert: SDP Offer (via server)
     Expert->>Technician: SDP Answer (via server)
-    
-    Note over Technician,Expert: ICE Candidate Exchange
     Technician<-->Expert: ICE candidates (via server)
-    
-    Note over Technician,Expert: Direct P2P Connection Established
 ```
 
 ### Connection States
