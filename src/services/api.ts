@@ -2,7 +2,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { API_URL_Base } from '../utils/const';
 import { Technician, Expert, WorkOrder } from '../types';
-import { MAXIMO_API_URL } from '../utils/const';
 
 const API_URL = API_URL_Base;
 
@@ -18,12 +17,10 @@ const maximoAxios = axios.create({
 // Add request interceptor for debugging
 maximoAxios.interceptors.request.use(
   (config) => {
-    console.log('Making request to:', config.url);
-    console.log('Headers:', config.headers);
+   
     return config;
   },
   (error) => {
-    console.error('Request error:', error);
     return Promise.reject(error);
   }
 );
@@ -31,11 +28,9 @@ maximoAxios.interceptors.request.use(
 // Add response interceptor for debugging
 maximoAxios.interceptors.response.use(
   (response) => {
-    console.log('Response received:', response.status);
     return response;
   },
   (error) => {
-    console.error('Response error:', error.response?.status, error.message);
     return Promise.reject(error);
   }
 );
@@ -45,7 +40,6 @@ export const login = async (username: string, password: string) => {
     const response = await axios.post(`${API_URL}/login`, { username, password });
     return response.data; // Returns { userId, role, message }
   } catch (error) {
-    console.error('Login error:', error);
     throw new Error('Login failed');
   }
 };
@@ -76,7 +70,6 @@ export const getConnectedExperts = async (): Promise<Expert[]> => {
     }));
     return experts;
   } catch (error) {
-    console.error('Error fetching experts from API:', error);
     // Fallback to mock data
     return [
       { id: 'user2', name: 'user2', status: 'online', role: 'Expert' },
@@ -87,21 +80,21 @@ export const getConnectedExperts = async (): Promise<Expert[]> => {
 
 export const getWorkOrders = async (): Promise<WorkOrder[]> => {
   try {
-    console.log('Fetching work orders from:', MAXIMO_API_URL);
     
-    const response = await maximoAxios.get(`${MAXIMO_API_URL}?oslc.where=status%3D%22INPRG%22&lean=1&oslc.select=*&oslc.pageSize=10`, {
+    const response = await maximoAxios.get(
+      `${process.env.MAXIMO_API_URL}?oslc.where=status%3D%22INPRG%22&lean=1&oslc.select=*&oslc.pageSize=10`,
+      {
       headers: {
-        'Cookie': '6d6972d6c01751c78a34bc82c12382fc=5c3fdd36cfcd7ca0d8319bff8687d529; JSESSIONIDUI=0000MCLt0TvdFk4Nv40knYhORFu:b15b3d21-8f18-4f31-8800-758c07818111',
-        'apikey': 'br6f7ujn7kaijrqs6mu3hicfg7htf8u8g1313p8',
+        'Cookie': process.env.MAXIMO_API_COOKIE,
+        'apikey': process.env.MAXIMO_API_KEY,
         'Accept': '*/*',
         'Cache-Control': 'no-cache',
       },
- 
-    });
+      }
+    );
     
     // Check if response has the expected structure
     if (!response.data || !response.data.member) {
-      console.error('Unexpected response structure:', response.data);
       throw new Error('Invalid response structure from Maximo API');
     }
     
@@ -164,13 +157,7 @@ export const getWorkOrders = async (): Promise<WorkOrder[]> => {
     return workOrders;
     
   } catch (error: any) {
-    console.error('Error fetching work orders from Maximo API:', {
-      message: error.message,
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      code: error.code,
-    });
+
     
     // Provide more specific error messages
     if (error.code === 'NETWORK_ERROR' || error.message.includes('Network Error')) {
@@ -191,26 +178,22 @@ export const getWorkOrders = async (): Promise<WorkOrder[]> => {
 
 export const getWorkOrdersPaginated = async (skip: number = 0, limit: number = 10): Promise<WorkOrder[]> => {
   try {
-    console.log(`API Call - Skip: ${skip}, Limit: ${limit}`);
     
     // For offset-based pagination, we need to fetch all data up to skip + limit
     // and then slice the results to get only the new items
     const totalNeeded = skip + limit;
     
-    console.log(`Fetching ${totalNeeded} total items to get items ${skip}-${skip + limit - 1}`);
-    console.log('API URL:', MAXIMO_API_URL);
     
-    const response = await maximoAxios.get(`${MAXIMO_API_URL}`, {
+    const response = await maximoAxios.get(`${process.env.MAXIMO_API_URL}`, {
       params: {
         'oslc.where': 'status="INPRG"',
         'lean': 1,
         'oslc.select': '*',
-        'oslc.pageSize': totalNeeded, // Request total items needed
-        // Remove pagination parameters that might cause issues
+        'oslc.pageSize': totalNeeded, 
       },
       headers: {
-        'Cookie': '6d6miriac01751c78a34bc82c12382fc=5c3fdd36cfcd7ca0d8319bff8687d529; JSESSIONIDUI=0000MCLt0TvdFk4Nv40knYhORFu:b15b3d21-8f18-4f31-8800-758c07818111',
-        'apikey': 'br6f7ujn7kaijrqs6mu3hicfg7htf8u8g1313p8',
+         'Cookie': process.env.MAXIMO_API_COOKIE,
+        'apikey': process.env.MAXIMO_API_KEY,
         'Accept': '*/*',
         'Cache-Control': 'no-cache',
       },
@@ -218,7 +201,6 @@ export const getWorkOrdersPaginated = async (skip: number = 0, limit: number = 1
     
     // Check if response has the expected structure
     if (!response.data || !response.data.member) {
-      console.error('Unexpected response structure:', response.data);
       throw new Error('Invalid response structure from Maximo API');
     }
     
@@ -280,20 +262,11 @@ export const getWorkOrdersPaginated = async (skip: number = 0, limit: number = 1
     // Slice the results to get only the requested range
     const requestedWorkOrders = allWorkOrders.slice(skip, skip + limit);
     
-    console.log(`Total received: ${allWorkOrders.length}, Requested slice: ${skip}-${skip + limit}, Returning: ${requestedWorkOrders.length} items`);
     
     return requestedWorkOrders;
     
   } catch (error: any) {
-    console.error('Error fetching paginated work orders from Maximo API:', {
-      message: error.message,
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      code: error.code,
-      skip,
-      limit,
-    });
+
     
     // Provide more specific error messages
     if (error.code === 'NETWORK_ERROR' || error.message.includes('Network Error')) {

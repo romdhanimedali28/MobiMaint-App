@@ -19,20 +19,15 @@ const MainPageScreen = () => {
   const _renderIcon = (routeName: string, selectedTab: string) => {
     const size = 25;
     let color = routeName === selectedTab ? '#1800ad' : '#6c757d';
-    console.log('---------------');
-    console.log(color);
-    console.log(routeName);
-    console.log(selectedTab);
-    console.log( routeName === selectedTab);
-    console.log('---------------');
+ 
 
     switch (routeName) {
       case 'AI':
-        return <AIIcon color={color} height={size} width={size} />;
+        return <AIIcon color={color} size={size} />;
       case 'Home':
-        return <HomeIcon color={color} height={size} width={size} />;
+        return <HomeIcon color={color} size={size}  />;
       case 'Profile':
-        return <ProfileIcon color={color} height={size} width={size} />;
+        return <ProfileIcon color={color} size={size}  />;
       default:
         return null;
     }

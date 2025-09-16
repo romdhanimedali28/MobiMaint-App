@@ -26,7 +26,6 @@ export default function BackendScreen() {
       navigation.navigate('Login');
     } catch (error) {
       Alert.alert('Error', 'Failed to set backend URL');
-      console.error('Error setting backend URL:', error);
     }
   };
 

@@ -62,7 +62,6 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         setHasMoreData(false);
       }
     } catch (error) {
-      console.error('Error fetching work orders:', error);
       Alert.alert('Error', 'Failed to load work orders');
     } finally {
       setLoading(false);
@@ -79,29 +78,21 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       const nextBatch = currentBatch + 1;
       const batchSize = getNextBatchSize(nextBatch);
       const currentLength = workOrders.length; // Use actual array length
-      
-      console.log(`Loading batch ${nextBatch}: ${batchSize} items, starting from index ${currentLength}`);
-      console.log(`Current workOrders length: ${currentLength}`);
-      
       const newOrders = await getWorkOrdersPaginated(currentLength, batchSize);
       
       if (newOrders.length === 0) {
         setHasMoreData(false);
-        console.log('No more data available');
       } else {
-        // Filter out duplicates based on workorderid to prevent repeating data
         const existingIds = new Set(workOrders.map(wo => wo.workorderid));
         const uniqueNewOrders = newOrders.filter(wo => !existingIds.has(wo.workorderid));
         
         if (uniqueNewOrders.length === 0) {
           setHasMoreData(false);
-          console.log('No new unique orders found');
         } else {
           setWorkOrders(prevOrders => [...prevOrders, ...uniqueNewOrders]);
           setTotalLoaded(prev => prev + uniqueNewOrders.length);
           setCurrentBatch(nextBatch);
           
-          console.log(`Added ${uniqueNewOrders.length} unique orders. Total: ${currentLength + uniqueNewOrders.length}`);
           
           // If we got less than requested, no more data available
           if (newOrders.length < batchSize) {
@@ -110,7 +101,6 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         }
       }
     } catch (error) {
-      console.error('Error loading more work orders:', error);
       Alert.alert('Error', 'Failed to load more work orders');
     } finally {
       setLoadingMore(false);
