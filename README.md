@@ -1,97 +1,211 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# WebRTC Video Calling App
 
-# Getting Started
+This is a **React Native** project for a professional video calling application that connects Technicians with Experts for remote assistance and work order support.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+## 🏗️ Architecture Overview
 
-## Step 1: Start Metro
+### Backend Infrastructure
+- **WebRTC Server**: Deployed on Azure Cloud
+- **DNS**: `http://webrtc-medali.japaneast.cloudapp.azure.com`
+- **TURN/STUN Server**: For NAT traversal and peer connection establishment
+- **Socket.io**: Real-time signaling for WebRTC negotiation
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+### App Navigation Flow
+```
+Backend Setup → Login → Role-Based Dashboard
+                 ├── Technician → Work Orders → Expert List → Video Call
+                 └── Expert → Dashboard → Wait for Calls → Video Call
+```
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+## 👥 User Roles & Workflows
 
-```sh
-# Using npm
+### 🔧 Technician Workflow
+1. **Login** → Access technician dashboard
+2. **Work Orders** → View assigned work orders and details
+3. **Expert List** → Browse available online experts
+4. **Video Call** → Connect with selected expert for assistance
+
+### 🎓 Expert Workflow  
+1. **Login** → Access expert dashboard
+2. **Dashboard** → Wait for incoming call requests from technicians
+3. **Accept Calls** → Receive and respond to video call requests
+4. **Video Support** → Provide remote assistance via video call
+
+## 🎥 WebRTC Video Calling Process
+
+### Initialization Phase
+1. **Permission Request**: Camera and microphone access
+2. **TURN Server Test**: Connectivity check for NAT traversal
+3. **Local Stream Setup**: Initialize user's camera and microphone
+4. **Socket Connection**: Connect to signaling server
+
+### Call Establishment (Technician Initiates)
+```mermaid
+sequenceDiagram
+    Technician->>Server: Create call request
+    Server->>Expert: Incoming call notification
+    Expert->>Server: Accept/Decline response
+    Server->>Technician: Call acceptance confirmation
+    
+    Note over Technician,Expert: WebRTC Negotiation
+    Technician->>Expert: SDP Offer (via server)
+    Expert->>Technician: SDP Answer (via server)
+    
+    Note over Technician,Expert: ICE Candidate Exchange
+    Technician<-->Expert: ICE candidates (via server)
+    
+    Note over Technician,Expert: Direct P2P Connection Established
+```
+
+### Connection States
+1. **Initializing**: Setting up WebRTC components
+2. **Connecting**: Establishing peer connection
+3. **Connected**: Active video call with media streams
+4. **Failed**: Connection timeout or error state
+
+## 🎛️ Video Call Features
+
+### Media Controls
+- **🎤 Microphone**: Toggle audio on/off
+- **📹 Camera**: Enable/disable local video
+- **🔄 Camera Flip**: Switch between front/rear camera  
+- **📞 End Call**: Terminate the video session
+
+### Stream Management
+- **Local Video**: Small overlay showing user's camera (120x160px)
+- **Remote Video**: Full screen view of the other participant
+- **Media Quality**: Automatic adaptation based on network conditions
+
+## 🚀 Getting Started
+
+### Prerequisites
+- Node.js (v16 or higher)
+- React Native development environment
+- Android Studio / Xcode
+- Physical device (recommended for camera/microphone testing)
+
+### Installation
+
+1. **Clone and Install Dependencies**
+```bash
+git clone <your-repo-url>
+cd webrtc-video-app
+npm install
+
+# For iOS only
+cd ios && bundle install && bundle exec pod install && cd ..
+```
+
+2. **Start Development Server**
+```bash
+# Start Metro bundler
 npm start
 
-# OR using Yarn
-yarn start
+# In separate terminals:
+npm run android  # For Android
+npm run ios      # For iOS
 ```
 
-## Step 2: Build and run your app
+### Configuration
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
+1. **Backend Setup Screen**: Configure your WebRTC server URL
+2. **Permissions**: Grant camera and microphone permissions when prompted
+3. **Network**: Ensure stable internet connection for video calling
 
-### Android
+## 📱 Screen Structure
 
-```sh
-# Using npm
-npm run android
-
-# OR using Yarn
-yarn android
+```
+AppNavigator/
+├── BackendScreen      # Server configuration
+├── LoginScreen        # User authentication  
+├── MainPageScreen     # Role selection/dashboard
+├── HomeScreen         # Technician home
+├── WorkOrderDetails   # Work order information
+├── ExpertListScreen   # Available experts
+├── ExpertHomeScreen   # Expert dashboard
+├── VideoCallScreen    # Video calling interface
+├── ProfileScreen      # User profile
+└── AIScreen          # AI assistance features
 ```
 
-### iOS
+## 🔧 Technical Implementation
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
+### WebRTC Components
+- **MediaStream**: Camera and microphone access
+- **RTCPeerConnection**: Peer-to-peer connection management
+- **RTCView**: Video stream rendering components
+- **Socket.io**: Real-time signaling for connection negotiation
 
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
+### Key Technologies
+- React Native WebRTC
+- Socket.io Client
+- React Navigation 6
+- AsyncStorage for configuration
+- Native permissions handling
 
-```sh
-bundle install
+### Error Handling
+- Connection timeout management (45 seconds)
+- Automatic reconnection attempts
+- Graceful degradation for network issues
+- User-friendly error messages
+
+## 🌐 Network Requirements
+
+### Firewall Configuration
+- **STUN**: Port 3478 (UDP/TCP)
+- **TURN**: Port 3478 (UDP/TCP) 
+- **HTTPS**: Port 443 for signaling
+- **ICE**: Dynamic port range for media
+
+### Supported Networks
+- WiFi networks
+- 4G/5G cellular networks
+- Corporate networks (with proper firewall configuration)
+
+## 🔒 Security Features
+
+- Encrypted peer-to-peer communication
+- TURN server authentication
+- User role-based access control
+- Secure signaling over HTTPS/WSS
+
+## 📚 Development Notes
+
+### Production Build
+- All debug logs and development tools removed
+- Optimized for performance and battery usage
+- Professional UI with proper icons and animations
+- Error handling without debug information exposure
+
+### Testing Recommendations
+- Test on real devices rather than simulators
+- Verify camera/microphone permissions
+- Test on different network conditions
+- Validate TURN server connectivity
+
+## 🐛 Troubleshooting
+
+### Common Issues
+1. **Camera/Mic Access**: Ensure permissions are granted in device settings
+2. **Connection Fails**: Check network connectivity and firewall settings
+3. **No Remote Video**: Verify TURN server accessibility
+4. **App Crashes**: Check device compatibility and available memory
+
+### Support
+For technical issues or deployment questions, ensure your Azure WebRTC server is properly configured and accessible from client devices.
+
+---
+
+## 🏁 Quick Start Commands
+
+```bash
+# Development
+npm start
+npm run android  # or ios
+
+# Clean build (if experiencing issues)
+npm run android -- --reset-cache
+cd ios && rm -rf build && cd .. && npm run ios
 ```
 
-Then, and every time you update your native dependencies, run:
-
-```sh
-bundle exec pod install
-```
-
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
-
-```sh
-# Using npm
-npm run ios
-
-# OR using Yarn
-yarn ios
-```
-
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
-
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
-
-## Step 3: Modify your app
-
-Now that you have successfully run the app, let's make changes!
-
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
-
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+This app provides a complete solution for remote technical support through professional-grade video calling, enabling seamless communication between field technicians and expert support staff.
