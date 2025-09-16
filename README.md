@@ -82,8 +82,8 @@ sequenceDiagram
 
 1. **Clone and Install Dependencies**
 ```bash
-git clone https://github.com/romdhanimedali28/MobiMaint-App.git
-cd webrtc-video-app
+git clone [https://github.com/romdhanimedali28/MobiMaint-App.git](https://github.com/romdhanimedali28/MobiMaint-App.git)
+cd MobiMaint-App
 npm install
 
 # For iOS only
