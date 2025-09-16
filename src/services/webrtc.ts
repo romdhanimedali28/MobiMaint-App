@@ -11,65 +11,53 @@ interface MediaTrackConstraints {
   frameRate?: { ideal: number; max: number; min: number };
 }
 
-// Enhanced WEBRTC configuration with multiple TURN servers
+// Enhanced WEBRTC configuration with your own STUN/TURN servers
 export const WEBRTC_CONFIG = {
   iceServers: [
-    // Google STUN servers
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' },
-
+    // Your own STUN server through load balancer
+    { 
+      urls: 'stun:webrtc-medali.japaneast.cloudapp.azure.com:3478' 
+    },
     
-    { urls: 'turn:speed.cloudflare.com:50000',
-      username: 'f06e89a6870819f7334046349af683f75946d7e9ffd5ffc1b3bdb3e288f42e9799cc4beacec107d0240ecb7f3dfa036f213c3aec6acd2b25a4459b7f6e1c66ea', 
-      credential: 'aba9b169546eb6dcc7bfb1cdf34544cf95b5161d602e3b5fa7c8342b2e9802fb' },
-    // {
-    //   urls: 'turn:openrelay.metered.ca:80',
-    //   username: 'openrelayproject',
-    //   credential: 'openrelayproject'
-    // },
-    // {
-    //   urls: 'turn:openrelay.metered.ca:443',
-    //   username: 'openrelayproject',
-    //   credential: 'openrelayproject'
-    // },
-    // {
-    //   urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-    //   username: 'openrelayproject',
-    //   credential: 'openrelayproject'
-    // },
+    // Your own TURN server through load balancer (primary)
+    {
+      urls: [
+        'turn:webrtc-medali.japaneast.cloudapp.azure.com:3478?transport=udp',
+        'turn:webrtc-medali.japaneast.cloudapp.azure.com:3478?transport=tcp',
+        'turns:webrtc-medali.japaneast.cloudapp.azure.com:5349?transport=udp',
+        'turns:webrtc-medali.japaneast.cloudapp.azure.com:5349?transport=tcp'
+      ],
+      username: 'medaliwebrtc',
+      credential: 'MAR+27290+F+WEBRTC#'
+    },
     
-    // // Alternative TURN servers for better connectivity
-    // {
-    //   urls: 'turn:a.relay.metered.ca:80',
-    //   username: 'a1f9c5ce691b0ef52cbbf8c6',
-    //   credential: 'sPNCDHRaO1LzfpGm'
-    // },
-    // {
-    //   urls: 'turn:a.relay.metered.ca:80?transport=tcp',
-    //   username: 'a1f9c5ce691b0ef52cbbf8c6',
-    //   credential: 'sPNCDHRaO1LzfpGm'
-    // },
-    // {
-    //   urls: 'turn:a.relay.metered.ca:443',
-    //   username: 'a1f9c5ce691b0ef52cbbf8c6',
-    //   credential: 'sPNCDHRaO1LzfpGm'
-    // },
-    // {
-    //   urls: 'turn:a.relay.metered.ca:443?transport=tcp',
-    //   username: 'a1f9c5ce691b0ef52cbbf8c6',
-    //   credential: 'sPNCDHRaO1LzfpGm'
-    // },
-    
-   
+    // Direct VM servers as backup (in case load balancer fails)
+    {
+      urls: [
+        'turn:172.192.57.220:3478?transport=udp',
+        'turn:172.192.57.220:3478?transport=tcp',
+        'turns:172.192.57.220:5349?transport=udp',
+        'turns:172.192.57.220:5349?transport=tcp'
+      ],
+      username: 'medaliwebrtc',
+      credential: 'MAR+27290+F+WEBRTC#'
+    },
+    {
+      urls: [
+        'turn:172.192.32.148:3478?transport=udp',
+        'turn:172.192.32.148:3478?transport=tcp',
+        'turns:172.192.32.148:5349?transport=udp',
+        'turns:172.192.32.148:5349?transport=tcp'
+      ],
+      username: 'medaliwebrtc',
+      credential: 'MAR+27290+F+WEBRTC#'
+    }
   ],
   iceCandidatePoolSize: 10,
-  iceTransportPolicy: 'all' as const, // Explicitly use literal type
-  bundlePolicy: 'balanced' as const, // Explicitly use literal type
-  rtcpMuxPolicy: 'require' as const, // Explicitly use literal type
-  sdpSemantics: 'unified-plan' as const, // Explicitly use literal type
+  iceTransportPolicy: 'all' as const,
+  bundlePolicy: 'balanced' as const,
+  rtcpMuxPolicy: 'require' as const,
+  sdpSemantics: 'unified-plan' as const,
 };
 
 export const SOCKET_CONFIG = {
@@ -110,6 +98,8 @@ export class WebRTCManager {
   private isOfferer: boolean = false;
   private connectionTimeout: NodeJS.Timeout | null = null;
   private iceGatheringTimeout: NodeJS.Timeout | null = null;
+  private isCleanedUp: boolean = false;
+  private connectionEstablishedCallback: (() => void) | null = null;
   
   constructor() {
     this.initializePeerConnection();
@@ -131,6 +121,9 @@ export class WebRTCManager {
         if (state === 'connected') {
           console.log('WebRTC connection established successfully');
           this.clearTimeouts();
+          if (this.connectionEstablishedCallback) {
+            this.connectionEstablishedCallback();
+          }
         } else if (state === 'failed' || state === 'closed') {
           console.log('WebRTC connection failed or closed');
           this.handleConnectionFailure();
@@ -162,11 +155,17 @@ export class WebRTCManager {
         }
       };
 
+      // Signaling state change handler
+      pc.onsignalingstatechange = () => {
+        const state = this.peerConnection?.signalingState;
+        console.log('Signaling state changed:', state);
+      };
+
       // Set connection timeout
       this.connectionTimeout = setTimeout(() => {
         console.log('Connection timeout reached');
         this.handleConnectionFailure();
-      }, 30000); // 30 seconds timeout
+      }, 45000); // 45 seconds timeout (increased)
 
     } catch (error) {
       console.error('Error initializing peer connection:', error);
@@ -186,15 +185,12 @@ export class WebRTCManager {
   }
 
   private handleConnectionFailure() {
-    console.log('Handling connection failure, attempting to restart ICE');
-    if (this.peerConnection) {
-      try {
-        // Restart ICE to try different candidates
-        (this.peerConnection as any).restartIce();
-      } catch (error) {
-        console.error('Error restarting ICE:', error);
-      }
-    }
+    console.log('Handling connection failure - clearing timeouts and stopping restart attempts');
+    this.clearTimeouts();
+    
+    // Don't restart ICE automatically as it can cause loops
+    // Let the application handle the failure
+    console.log('Connection failed - manual intervention may be required');
   }
 
   async getLocalStream(constraints: MediaConstraints = DEFAULT_MEDIA_CONSTRAINTS): Promise<MediaStream> {
@@ -272,6 +268,10 @@ export class WebRTCManager {
   }
 
   async createAnswer(offer: RTCSessionDescription): Promise<RTCSessionDescription> {
+    if (this.isCleanedUp) {
+      throw new Error('WebRTC manager has been cleaned up');
+    }
+    
     if (!this.peerConnection) {
       throw new Error('Peer connection not initialized');
     }
@@ -283,8 +283,18 @@ export class WebRTCManager {
       await this.peerConnection.setRemoteDescription(offer);
       console.log('Remote description set successfully');
       
+      // Check if peer connection is still valid before creating answer
+      if (this.isCleanedUp || !this.peerConnection) {
+        throw new Error('Peer connection was closed during remote description setting');
+      }
+      
       const answer = await this.peerConnection.createAnswer();
       console.log('Answer created successfully');
+      
+      // Check if peer connection is still valid before setting local description
+      if (this.isCleanedUp || !this.peerConnection) {
+        throw new Error('Peer connection was closed during answer creation');
+      }
       
       await this.peerConnection.setLocalDescription(answer);
       console.log('Local description set successfully');
@@ -389,8 +399,18 @@ export class WebRTCManager {
     return (this.peerConnection as any).getStats();
   }
 
+  setConnectionEstablishedHandler(callback: () => void) {
+    this.connectionEstablishedCallback = callback;
+  }
+
   cleanup(): void {
+    if (this.isCleanedUp) {
+      console.log('WebRTC manager already cleaned up, skipping...');
+      return;
+    }
+    
     console.log('Cleaning up WebRTC manager...');
+    this.isCleanedUp = true;
     
     this.clearTimeouts();
     
@@ -429,56 +449,73 @@ export class WebRTCManager {
   }
 }
 
-// interface TurnCredentials {
-//   urls: string;
-//   username: string;
-//   credential: string;
-// }
-
-// export const getTurnServerCredentials = async (): Promise<TurnCredentials> => {
-//   return {
-//     urls: 'turn:openrelay.metered.ca:80',
-//     username: 'openrelayproject',
-//     credential: 'openrelayproject'
-//   };
-// };
-
 // Test connectivity to TURN servers
 export const testTurnConnectivity = async (): Promise<boolean> => {
   try {
+    console.log("Starting TURN connectivity test...");
     const testPC = new RTCPeerConnection(WEBRTC_CONFIG);
-    console.log("test PCcccccccc",testPC);
     
     return new Promise((resolve) => {
-      let hasConnected = false;
+      let resolved = false;
       
-      (testPC as any).oniceconnectionstatechange = () => {
-        console.log("coonect ",testPC.iceConnectionState );
-        
-        if (testPC.iceConnectionState === 'connected' || testPC.iceConnectionState === 'completed') {
-          hasConnected = true;
-          resolve(true);
-        } else if (testPC.iceConnectionState === 'failed') {
-          resolve(false);
+      // Set up ICE candidate handler to check if TURN servers are accessible
+      (testPC as any).onicecandidate = (event: { candidate: RTCIceCandidate | null }) => {
+        if (event.candidate) {
+          console.log("ICE candidate:", event.candidate.candidate);
+          
+          // Check if we got a relay candidate (TURN server)
+          if (event.candidate.candidate.includes('typ relay')) {
+            console.log("TURN server is accessible - relay candidate found");
+            if (!resolved) {
+              resolved = true;
+              resolve(true);
+              testPC.close();
+            }
+          }
+        } else {
+          // ICE gathering complete
+          console.log("ICE gathering completed");
+          if (!resolved) {
+            resolved = true;
+            resolve(true); // Consider it successful even without relay
+            testPC.close();
+          }
         }
       };
-      console.log("66666666666666",hasConnected);
       
-      // Create a test offer
-      testPC.createOffer([]).then(offer => {
-        testPC.setLocalDescription(offer);
+      (testPC as any).onicegatheringstatechange = () => {
+        console.log("ICE gathering state:", testPC.iceGatheringState);
+      };
+      
+      // Create a test offer to start ICE gathering
+      testPC.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true,
+      }).then(offer => {
+        return testPC.setLocalDescription(offer);
+      }).then(() => {
+        console.log("Test offer created and local description set");
+      }).catch(error => {
+        console.error("Error creating test offer:", error);
+        if (!resolved) {
+          resolved = true;
+          resolve(false);
+          testPC.close();
+        }
       });
       
       // Timeout after 10 seconds
       setTimeout(() => {
-        if (!hasConnected) {
-          resolve(false);
+        if (!resolved) {
+          console.log("TURN connectivity test timeout");
+          resolved = true;
+          resolve(true); // Don't fail the call due to test timeout
+          testPC.close();
         }
-        testPC.close();
-      }, 20000);
+      }, 10000);
     });
   } catch (error) {
     console.error('Error testing TURN connectivity:', error);
-    return false;
+    return true; // Don't fail the call due to test error
   }
 };

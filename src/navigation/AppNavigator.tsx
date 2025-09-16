@@ -39,7 +39,7 @@ export default function AppNavigator() {
       <Stack.Screen 
         name="WorkOrderDetails" 
         component={WorkOrderDetails} 
-        options={{ title: 'Work Order Details' }} 
+        options={{ headerShown: false }} 
       />
       <Stack.Screen 
         name="ExpertList" 

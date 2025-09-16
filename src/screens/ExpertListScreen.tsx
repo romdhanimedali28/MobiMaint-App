@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Image, Modal, TextInput, Button, Alert, RefreshControl } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Image, Modal, Button, Alert, RefreshControl } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../types';
@@ -8,6 +8,9 @@ import { getConnectedExperts } from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import io from 'socket.io-client';
 import axios from 'axios';
+import VideoIcon from '../components/icons/video';
+import Logo from '../components/Logo';
+
 type Props = NativeStackScreenProps<RootStackParamList, 'ExpertList'>;
 
 interface Expert {
@@ -33,14 +36,14 @@ export default function ExpertListScreen({ navigation, route }: Props) {
     const backendUrl = await AsyncStorage.getItem('backendUrl');
     if (backendUrl) {
       socket.current = io(backendUrl, { transports: ['websocket'] });
+      
       socket.current.on('connect', () => {
-        console.log(`Socket connected for user ${userId}`);
         socket.current.emit('register', { userId });
       });
 
       socket.current.on('call-response', ({ callId, from, accepted }) => {
         if (accepted) {
-          setShowCallModal(false); // Close modal on acceptance
+          setShowCallModal(false);
           navigation.navigate('VideoCall', {
             callId,
             recipientId: from,
@@ -49,26 +52,23 @@ export default function ExpertListScreen({ navigation, route }: Props) {
             isCaller: true,
           });
         } else {
-          setShowCallModal(false); // Close modal on rejection
-          Alert.alert('Call Rejected', `${from} has rejected the call.`);
+          setShowCallModal(false);
+          Alert.alert('Call Declined', `${from} has declined the call.`);
         }
       });
 
       socket.current.on('error', ({ message }) => {
-        console.error('Socket error:', message);
         setShowCallModal(false);
-        Alert.alert('Error', message);
+        Alert.alert('Connection Error', message);
       });
     } else {
-      console.error('Backend URL not set');
-      Alert.alert('Error', 'Backend URL not configured');
+      Alert.alert('Configuration Error', 'Backend URL not configured');
     }
   }, [userId, role, navigation]);
 
   useEffect(() => {
     checkPermissions();
     setupSocket();
-
     return () => {
       if (socket.current) {
         socket.current.disconnect();
@@ -93,7 +93,6 @@ export default function ExpertListScreen({ navigation, route }: Props) {
       const fetchedExperts = await getConnectedExperts();
       setExperts(fetchedExperts);
     } catch (error) {
-      console.error('Error fetching experts:', error);
       Alert.alert('Error', 'Failed to load experts');
     } finally {
       setLoading(false);
@@ -106,7 +105,6 @@ export default function ExpertListScreen({ navigation, route }: Props) {
       const fetchedExperts = await getConnectedExperts();
       setExperts(fetchedExperts);
     } catch (error) {
-      console.error('Error refreshing experts:', error);
       Alert.alert('Error', 'Failed to refresh experts');
     } finally {
       setRefreshing(false);
@@ -128,33 +126,25 @@ export default function ExpertListScreen({ navigation, route }: Props) {
       setPermissionsGranted(true);
     }
 
-    let validCallId = callId;
-    if (role === 'Technician') {
-      try {
-        const backendUrl = await AsyncStorage.getItem('backendUrl');
-        if (!backendUrl) throw new Error('Backend URL not set');
-        const response = await axios.post(`${backendUrl}/api/create-call`, { userId });
-        validCallId = response.data.callId;
-        setCallId(validCallId);
-        setCallingExpert(expert.name);
-        setShowCallModal(true);
-        socket.current.emit('call-request', { callId: validCallId, from: userId, to: expert.id });
-      } catch (error) {
-        console.error('Error creating call:', error);
-        setShowCallModal(false);
-        Alert.alert('Error', 'Failed to create call');
-      }
-    } else if (!callId) {
-      Alert.alert('Error', 'Please enter a Call ID');
-      return;
-    } else {
-      navigation.navigate('VideoCall', {
-        callId: validCallId,
-        recipientId: expert.id,
-        userId,
-        role,
-        isCaller: false,
+    try {
+      const backendUrl = await AsyncStorage.getItem('backendUrl');
+      if (!backendUrl) throw new Error('Backend URL not set');
+
+      const response = await axios.post(`${backendUrl}/api/create-call`, { userId });
+      const validCallId = response.data.callId;
+      
+      setCallId(validCallId);
+      setCallingExpert(expert.name);
+      setShowCallModal(true);
+      
+      socket.current.emit('call-request', { 
+        callId: validCallId, 
+        from: userId, 
+        to: expert.id 
       });
+    } catch (error) {
+      setShowCallModal(false);
+      Alert.alert('Error', 'Failed to create call');
     }
   };
 
@@ -165,43 +155,41 @@ export default function ExpertListScreen({ navigation, route }: Props) {
       disabled={item.status === 'offline'}
     >
       <View style={styles.expertInfo}>
-        <Image
-          source={{ uri: item.avatar || 'https://via.placeholder.com/60' }}
-          style={styles.avatar}
-        />
+       
         <View style={styles.expertDetails}>
           <Text style={styles.expertName}>{item.name}</Text>
-          <Text style={styles.expertSpecialization}>{item.role}</Text>
+          <Text style={styles.expertRole}>{item.role}</Text>
           <View style={styles.statusContainer}>
-            <View style={[styles.statusDot, { backgroundColor: item.status === 'online' ? '#4CAF50' : '#FF5722' }]} />
-            <Text style={[styles.expertStatus, { color: item.status === 'online' ? '#4CAF50' : '#FF5722' }]}>
+            <View 
+              style={[
+                styles.statusDot, 
+                { backgroundColor: item.status === 'online' ? '#28a745' : '#dc3545' }
+              ]} 
+            />
+            <Text 
+              style={[
+                styles.expertStatus, 
+                { color: item.status === 'online' ? '#28a745' : '#dc3545' }
+              ]}
+            >
               {item.status === 'online' ? 'Available' : 'Offline'}
             </Text>
           </View>
         </View>
       </View>
+      
       <TouchableOpacity
-        style={[styles.callButton, item.status === 'offline' ? styles.disabledButton : {}]}
+        style={[
+          styles.callButton, 
+          item.status === 'offline' ? styles.disabledButton : styles.activeButton
+        ]}
         onPress={() => startCall(item)}
         disabled={item.status === 'offline'}
       >
-        <Text style={styles.callButtonText}>📹</Text>
+        <VideoIcon color="white" size={24} />
       </TouchableOpacity>
     </TouchableOpacity>
   );
-
-  const callIdInput = role === 'Expert' ? (
-    <View style={styles.callIdContainer}>
-      <TextInput
-        style={styles.callIdInput}
-        placeholder="Enter Call ID"
-        value={callId}
-        onChangeText={setCallId}
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-    </View>
-  ) : null;
 
   const onlineExperts = experts.filter(expert => expert.status === 'online');
   const offlineExperts = experts.filter(expert => expert.status === 'offline');
@@ -209,19 +197,20 @@ export default function ExpertListScreen({ navigation, route }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Image
-          source={{ uri: 'https://img.freepik.com/free-vector/bird-colorful-logo-gradient-vector_343694-1365.jpg?semt=ais_hybrid&w=740' }}
-          style={styles.logo}
-        />
+        <Logo width={80} height={80} style={styles.logo} />
         <Text style={styles.title}>Expert Support</Text>
-        <Text style={styles.subtitle}>Connect with maintenance experts</Text>
+        <Text style={styles.subtitle}>Connect with available experts</Text>
       </View>
-      <Text style={styles.expertName}>{userId}</Text>
-      {callIdInput}
+
       {loading ? (
-        <Text style={styles.loadingText}>Loading experts...</Text>
+        <View style={styles.centerContainer}>
+          <Text style={styles.loadingText}>Loading experts...</Text>
+        </View>
       ) : experts.length === 0 ? (
-        <Text style={styles.loadingText}>No experts available</Text>
+        <View style={styles.centerContainer}>
+          <Text style={styles.emptyText}>No experts available</Text>
+          <Text style={styles.emptySubText}>Pull to refresh</Text>
+        </View>
       ) : (
         <FlatList
           data={[...onlineExperts, ...offlineExperts]}
@@ -233,14 +222,15 @@ export default function ExpertListScreen({ navigation, route }: Props) {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              colors={['#1976D2']} // Android
-              tintColor="#1976D2" // iOS
-              title="Pull to refresh" // iOS
-              titleColor="#1976D2" // iOS
+              colors={['#6c757d']}
+              tintColor="#6c757d"
+              title="Pull to refresh"
+              titleColor="#6c757d"
             />
           }
         />
       )}
+
       <Modal
         visible={showCallModal}
         transparent={true}
@@ -249,29 +239,39 @@ export default function ExpertListScreen({ navigation, route }: Props) {
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalText}>Call Request Sent</Text>
-            <Text style={styles.modalSubText}>Waiting for {callingExpert} to respond...</Text>
-            <Button
-              title="Cancel"
-              color="#FF0000"
-              onPress={() => {
-                setShowCallModal(false);
-                socket.current.emit('call-response', { callId, from: userId, to: callingExpert, accepted: false });
-              }}
-            />
+            <Text style={styles.modalTitle}>Calling...</Text>
+            <Text style={styles.modalText}>
+              Waiting for {callingExpert} to respond
+            </Text>
+            <View style={styles.modalButtonContainer}>
+              <Button
+                title="Cancel Call"
+                color="#dc3545"
+                onPress={() => {
+                  setShowCallModal(false);
+                  socket.current.emit('call-response', { 
+                    callId, 
+                    from: userId, 
+                    to: callingExpert, 
+                    accepted: false 
+                  });
+                }}
+              />
+            </View>
           </View>
         </View>
       </Modal>
+
       <View style={styles.footer}>
         <Text style={styles.footerText}>
-          Permissions: {permissionsGranted ? '✅ Granted' : '❌ Not Granted'}
+          Permissions: {permissionsGranted ? '✅ Camera & Microphone Access Granted' : '❌ Permissions Required'}
         </Text>
         {!permissionsGranted && (
           <TouchableOpacity
             style={styles.permissionButton}
             onPress={() => requestCameraAndMicPermissions().then(setPermissionsGranted)}
           >
-            <Text style={styles.permissionButtonText}>Grant Permissions</Text>
+            <Text style={styles.permissionButtonText}>Grant Camera & Microphone Access</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -282,32 +282,55 @@ export default function ExpertListScreen({ navigation, route }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
+    backgroundColor: '#f8f9fa',
   },
   header: {
-    backgroundColor: '#1976D2',
-    paddingTop: 20,
-    paddingBottom: 30,
+    backgroundColor: '#ffffff',
+    paddingTop: 40,
+    paddingBottom: 25,
     paddingHorizontal: 20,
     alignItems: 'center',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   logo: {
-    width: 80,
-    height: 80,
-    marginBottom: 10,
-    borderRadius: 40,
+    marginBottom: 15,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: '#212529',
     marginBottom: 5,
   },
   subtitle: {
     fontSize: 14,
-    color: '#BBDEFB',
+    color: '#6c757d',
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#6c757d',
+    textAlign: 'center',
+  },
+  emptyText: {
+    fontSize: 18,
+    color: '#495057',
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  emptySubText: {
+    fontSize: 14,
+    color: '#6c757d',
   },
   listContainer: {
     paddingHorizontal: 20,
@@ -315,8 +338,8 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   expertItem: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 15,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     flexDirection: 'row',
@@ -326,21 +349,27 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
   },
   disabledItem: {
-    backgroundColor: '#F5F5F5',
-    opacity: 0.6,
+    backgroundColor: '#f8f9fa',
+    opacity: 0.7,
   },
   expertInfo: {
     flex: 1,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    marginLeft: 10,
+    marginTop: 8,
   },
   avatar: {
     width: 60,
     height: 60,
     borderRadius: 30,
     marginRight: 15,
+    borderWidth: 2,
+    borderColor: '#e9ecef',
   },
   expertDetails: {
     flex: 1,
@@ -348,12 +377,12 @@ const styles = StyleSheet.create({
   expertName: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#1976D2',
+    color: '#212529',
     marginBottom: 4,
   },
-  expertSpecialization: {
+  expertRole: {
     fontSize: 14,
-    color: '#666',
+    color: '#6c757d',
     marginBottom: 6,
   },
   statusContainer: {
@@ -364,68 +393,66 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    marginRight: 6,
+    marginRight: 8,
   },
   expertStatus: {
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '600',
+    textTransform: 'uppercase',
   },
   callButton: {
-    backgroundColor: '#4CAF50',
     width: 50,
     height: 50,
     borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 10,
+    marginLeft: 15,
+  },
+  activeButton: {
+    backgroundColor: '#28a745',
+    shadowColor: '#28a745',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
   disabledButton: {
-    backgroundColor: '#CCCCCC',
-  },
-  callButtonText: {
-    fontSize: 20,
+    backgroundColor: '#6c757d',
   },
   footer: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#ffffff',
     padding: 15,
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    borderTopColor: '#e9ecef',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   footerText: {
     fontSize: 12,
-    color: '#666',
-    marginBottom: 5,
+    color: '#6c757d',
+    marginBottom: 8,
+    textAlign: 'center',
   },
   permissionButton: {
-    backgroundColor: '#FF9800',
+    backgroundColor: '#007bff',
     paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingVertical: 10,
+    borderRadius: 25,
+    shadowColor: '#007bff',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   permissionButtonText: {
-    color: '#FFFFFF',
+    color: '#ffffff',
     fontSize: 12,
     fontWeight: 'bold',
-  },
-  callIdContainer: {
-    padding: 10,
-    backgroundColor: '#E0F7FA',
-    borderRadius: 5,
-    margin: 20,
-  },
-  callIdInput: {
-    borderWidth: 1,
-    borderColor: '#1976D2',
-    borderRadius: 5,
-    padding: 10,
-    color: '#000',
-  },
-  loadingText: {
-    fontSize: 16,
-    color: '#666',
     textAlign: 'center',
-    marginTop: 20,
   },
   modalContainer: {
     flex: 1,
@@ -434,19 +461,32 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
-    padding: 20,
-    borderRadius: 10,
+    backgroundColor: '#ffffff',
+    padding: 30,
+    borderRadius: 15,
     alignItems: 'center',
-    width: '80%',
+    width: '85%',
+    maxWidth: 300,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  modalText: {
-    fontSize: 18,
+  modalTitle: {
+    fontSize: 20,
     fontWeight: 'bold',
+    color: '#212529',
     marginBottom: 10,
   },
-  modalSubText: {
+  modalText: {
     fontSize: 16,
-    marginBottom: 20,
+    color: '#6c757d',
+    textAlign: 'center',
+    marginBottom: 25,
+    lineHeight: 22,
+  },
+  modalButtonContainer: {
+    width: '100%',
   },
 });
