@@ -26,7 +26,6 @@ class PermissionService {
         return false;
       }
     } catch (error) {
-      console.error('Permission error:', error);
       return false;
     }
   }

@@ -17,7 +17,6 @@ export default function TechnicianListScreen() {
         const data = await getTechnicians();
         setTechnicians(data);
       } catch (error) {
-        console.error('Failed to fetch technicians', error);
       }
     };
     fetchTechnicians();

@@ -18,7 +18,6 @@ export const checkCameraAndMicPermissions = async (): Promise<boolean> => {
     }
     return true;
   } catch (error) {
-    console.error('Error checking permissions:', error);
     return false;
   }
 };
@@ -48,7 +47,6 @@ export const requestCameraAndMicPermissions = async (): Promise<boolean> => {
     }
     return true;
   } catch (error) {
-    console.error('Error requesting permissions:', error);
     return false;
   }
 };
