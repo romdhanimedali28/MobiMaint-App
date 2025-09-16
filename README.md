@@ -40,7 +40,7 @@ Backend Setup → Login → Role-Based Dashboard
 4. **Socket Connection**: Connect to signaling server
 
 ### Call Establishment (Technician Initiates)
-```mermaid
+```
 sequenceDiagram
     Technician->>Server: Create call request
     Server->>Expert: Incoming call notification
@@ -88,7 +88,7 @@ sequenceDiagram
 
 1. **Clone and Install Dependencies**
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/romdhanimedali28/MobiMaint-App.git
 cd webrtc-video-app
 npm install
 
