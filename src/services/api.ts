@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { API_URL_Base } from '../utils/const';
 import { Technician, Expert, WorkOrder } from '../types';
-
+import { MAXIMO_API_URL, MAXIMO_API_COOKIE, MAXIMO_API_KEY } from '@env';
 const API_URL = API_URL_Base;
 
 // Create axios instance with SSL configuration
@@ -82,11 +82,11 @@ export const getWorkOrders = async (): Promise<WorkOrder[]> => {
   try {
     
     const response = await maximoAxios.get(
-      `${process.env.MAXIMO_API_URL}?oslc.where=status%3D%22INPRG%22&lean=1&oslc.select=*&oslc.pageSize=10`,
+      `${MAXIMO_API_URL}?oslc.where=status%3D%22INPRG%22&lean=1&oslc.select=*&oslc.pageSize=10`,
       {
       headers: {
-        'Cookie': process.env.MAXIMO_API_COOKIE,
-        'apikey': process.env.MAXIMO_API_KEY,
+        'Cookie': MAXIMO_API_COOKIE,
+        'apikey': MAXIMO_API_KEY,
         'Accept': '*/*',
         'Cache-Control': 'no-cache',
       },
@@ -183,8 +183,9 @@ export const getWorkOrdersPaginated = async (skip: number = 0, limit: number = 1
     // and then slice the results to get only the new items
     const totalNeeded = skip + limit;
     
+    console.log(MAXIMO_API_URL);
     
-    const response = await maximoAxios.get(`${process.env.MAXIMO_API_URL}`, {
+    const response = await maximoAxios.get(`${MAXIMO_API_URL}`, {
       params: {
         'oslc.where': 'status="INPRG"',
         'lean': 1,
@@ -192,8 +193,8 @@ export const getWorkOrdersPaginated = async (skip: number = 0, limit: number = 1
         'oslc.pageSize': totalNeeded, 
       },
       headers: {
-         'Cookie': process.env.MAXIMO_API_COOKIE,
-        'apikey': process.env.MAXIMO_API_KEY,
+         'Cookie': MAXIMO_API_COOKIE,
+        'apikey': MAXIMO_API_KEY,
         'Accept': '*/*',
         'Cache-Control': 'no-cache',
       },
